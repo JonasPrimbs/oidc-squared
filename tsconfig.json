@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "strict": true,
+    "module": "UMD",
+    "moduleResolution": "nodenext",
+    "rootDir": "src",
+    "declaration": true,
+    "declarationDir": "./dist",
+    "declarationMap": true,
+    "newLine": "lf",
+    "outDir": "./dist",
+    "sourceMap": true,
+    "esModuleInterop": true,
+    "lib": [
+      "ESNext",
+      "DOM"
+    ],
+    "target": "ES2022",
+  },
+  "include": [
+    "src/**/*",
+  ],
+}
