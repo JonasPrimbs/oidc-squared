@@ -1,0 +1,39 @@
+{
+  "root": true,
+  "env": {
+    "browser": true,
+    "node": true
+  },
+  "parser": "@typescript-eslint/parser",
+  "plugins": [
+    "@typescript-eslint"
+  ],
+  "rules": {
+    "semi": [1, "always"],
+    "quotes": [1, "single"],
+    "indent": [1, 2],
+    "comma-dangle": [1, "always-multiline"],
+    "array-element-newline": [1, "consistent"],
+    "object-curly-newline": [1, {
+      "ObjectExpression": {
+        "multiline": true,
+        "minProperties": 1
+      },
+      "ObjectPattern": "always",
+      "ImportDeclaration": "never",
+      "ExportDeclaration": {
+        "multiline": true,
+        "minProperties": 2
+      }
+    }],
+    "lines-between-class-members": [1, "always"],
+    "lines-around-comment": [1, {
+      "beforeBlockComment": true
+    }]
+  },
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/eslint-recommended",
+    "plugin:@typescript-eslint/recommended"
+  ]
+}
