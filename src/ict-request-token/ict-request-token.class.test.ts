@@ -221,6 +221,7 @@ test('sets an RSA key to an empty ICT Request Token', async () => {
     rs256KeyPairNoExt,
     rs384KeyPairNoExt,
     rs512KeyPairNoExt,
+    rs256PublicKeyNoExt,
   ] = await Promise.all([
     crypto.subtle.generateKey({
       name: 'RSASSA-PKCS1-v1_5',
@@ -270,6 +271,22 @@ test('sets an RSA key to an empty ICT Request Token', async () => {
         name: 'SHA-512',
       },
     }, false, ['sign', 'verify']),
+    crypto.subtle.generateKey({
+      name: 'RSASSA-PKCS1-v1_5',
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([0x01, 0x00, 0x01]),
+      hash: {
+        name: 'SHA-256',
+      },
+    }, true, ['sign', 'verify']).then(async keyPair => {
+      return await crypto.subtle.importKey('jwk',
+        await crypto.subtle.exportKey('jwk', keyPair.publicKey), {
+          name: 'RSASSA-PKCS1-v1_5', hash: {
+            name: 'SHA-256',
+          },
+        }, false, ['verify']
+      );
+    }),
   ]);
 
   // Verify that setting a public key of a non-extractable key pair does not throw.
@@ -281,6 +298,9 @@ test('sets an RSA key to an empty ICT Request Token', async () => {
   expect(() => new IctRequestToken().setPublicKey(rs256KeyPair.privateKey)).toThrow();
   expect(() => new IctRequestToken().setPublicKey(rs384KeyPair.privateKey)).toThrow();
   expect(() => new IctRequestToken().setPublicKey(rs512KeyPair.privateKey)).toThrow();
+
+  // Verify that setting a not-extractable public key throws an error.
+  expect(() => new IctRequestToken().setPublicKey(rs256PublicKeyNoExt)).toThrow();
 
   // Verify that setting a sufficient public key does not throw an error.
   expect(() => new IctRequestToken().setPublicKey(rs256KeyPair.publicKey)).not.toThrow();
@@ -565,10 +585,11 @@ test('sets not before to an empty ICT Request Token', () => {
   expect(() => new IctRequestToken().setNotBefore(1679612400)).not.toThrow();
   expect(() => new IctRequestToken().setNotBefore(new Date('2023-03-24 00:00:00'))).not.toThrow();
 
-  expect(() => new IctRequestToken().setIssuedAt(-1)).toThrow();
-  expect(() => new IctRequestToken().setIssuedAt(Infinity)).toThrow();
-  expect(() => new IctRequestToken().setIssuedAt(Number.NEGATIVE_INFINITY)).toThrow();
-  expect(() => new IctRequestToken().setIssuedAt(Number.NaN)).toThrow();
+  expect(() => new IctRequestToken().setNotBefore(-1)).toThrow();
+  expect(() => new IctRequestToken().setNotBefore(Infinity)).toThrow();
+  expect(() => new IctRequestToken().setNotBefore(Number.NEGATIVE_INFINITY)).toThrow();
+  expect(() => new IctRequestToken().setNotBefore(-1)).toThrow();
+  expect(() => new IctRequestToken().setNotBefore(Number.NaN)).toThrow();
 
   expect(new IctRequestToken().setNotBefore()).toBeInstanceOf(IctRequestToken);
   expect(new IctRequestToken().setNotBefore(1679612400)).toBeInstanceOf(IctRequestToken);
@@ -1020,17 +1041,186 @@ test('signs the IRT', async () => {
   // Test to throw if wrong signing key is provided.
   await expect(new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec256KeyPair.publicKey)).rejects.toThrow();
   await expect(new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(rsaEncKeyPair.publicKey)).rejects.toThrow();
+  await expect(new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(rsaEncKeyPair.privateKey)).rejects.toThrow();
   await expect(new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(hs512Key)).rejects.toThrow();
+  await expect(new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec384KeyPair.privateKey)).rejects.toThrow();
+  await expect(new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(rs256KeyPair.privateKey)).rejects.toThrow();
+  await expect(new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ps256KeyPair.privateKey)).rejects.toThrow();
+  await expect(new IctRequestToken().setPublicKey(ps256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ps384KeyPair.privateKey)).rejects.toThrow();
+  await expect(new IctRequestToken().setPublicKey(ps256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(rs256KeyPair.privateKey)).rejects.toThrow();
+  await expect(new IctRequestToken().setPublicKey(ps256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec256KeyPair.privateKey)).rejects.toThrow();
+  await expect(new IctRequestToken().setPublicKey(rs256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(rs384KeyPair.privateKey)).rejects.toThrow();
+  await expect(new IctRequestToken().setPublicKey(rs256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec256KeyPair.privateKey)).rejects.toThrow();
+  await expect(new IctRequestToken().setPublicKey(rs256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ps256KeyPair.privateKey)).rejects.toThrow();
 
-  await expect(new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec256KeyPair.privateKey)).rejects.not.toThrow();
-  await expect(new IctRequestToken().setPublicKey(ec384KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec384KeyPair.privateKey)).rejects.not.toThrow();
-  await expect(new IctRequestToken().setPublicKey(ec512KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec512KeyPair.privateKey)).rejects.not.toThrow();
-  await expect(new IctRequestToken().setPublicKey(rs256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(rs256KeyPair.privateKey)).rejects.not.toThrow();
-  await expect(new IctRequestToken().setPublicKey(rs384KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(rs384KeyPair.privateKey)).rejects.not.toThrow();
-  await expect(new IctRequestToken().setPublicKey(rs512KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(rs512KeyPair.privateKey)).rejects.not.toThrow();
-  await expect(new IctRequestToken().setPublicKey(ps256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ps256KeyPair.privateKey)).rejects.not.toThrow();
-  await expect(new IctRequestToken().setPublicKey(ps384KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ps384KeyPair.privateKey)).rejects.not.toThrow();
-  await expect(new IctRequestToken().setPublicKey(ps512KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ps512KeyPair.privateKey)).rejects.not.toThrow();
+  // Test to not throw if correct signing key is provided.
+  await expect(new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec256KeyPair.privateKey)).resolves.not.toThrow();
+  await expect(new IctRequestToken().setPublicKey(ec384KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec384KeyPair.privateKey)).resolves.not.toThrow();
+  await expect(new IctRequestToken().setPublicKey(ec512KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec512KeyPair.privateKey)).resolves.not.toThrow();
+  await expect(new IctRequestToken().setPublicKey(rs256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(rs256KeyPair.privateKey)).resolves.not.toThrow();
+  await expect(new IctRequestToken().setPublicKey(rs384KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(rs384KeyPair.privateKey)).resolves.not.toThrow();
+  await expect(new IctRequestToken().setPublicKey(rs512KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(rs512KeyPair.privateKey)).resolves.not.toThrow();
+  await expect(new IctRequestToken().setPublicKey(ps256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ps256KeyPair.privateKey)).resolves.not.toThrow();
+  await expect(new IctRequestToken().setPublicKey(ps384KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ps384KeyPair.privateKey)).resolves.not.toThrow();
+  await expect(new IctRequestToken().setPublicKey(ps512KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ps512KeyPair.privateKey)).resolves.not.toThrow();
 
-  
+  // Test if hasSignature() works correctly.
+  await expect(new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec256KeyPair.privateKey)).resolves.toBeInstanceOf(IctRequestToken);
+  await expect((async () => {
+    const token = await new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec256KeyPair.privateKey);
+    return token.hasSignature();
+  })()).resolves.toBe(true);
+  await expect((async () => {
+    const token = await new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec256KeyPair.privateKey);
+    return token.setAudience('aud').hasSignature();
+  })()).resolves.toBe(false);
+  await expect((async () => {
+    const token = await new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec256KeyPair.privateKey);
+    return token.setExpirationTime(Date.now() / 1000).hasSignature();
+  })()).resolves.toBe(false);
+  await expect((async () => {
+    const token = await new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec256KeyPair.privateKey);
+    return token.setIssuedAt().hasSignature();
+  })()).resolves.toBe(false);
+  await expect((async () => {
+    const token = await new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec256KeyPair.privateKey);
+    return token.setIssuer('iss').hasSignature();
+  })()).resolves.toBe(false);
+  await expect((async () => {
+    const token = await new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec256KeyPair.privateKey);
+    return token.setJti('jti').hasSignature();
+  })()).resolves.toBe(false);
+  await expect((async () => {
+    const token = await new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec256KeyPair.privateKey);
+    return token.setNonce('nonce').hasSignature();
+  })()).resolves.toBe(false);
+  await expect((async () => {
+    const token = await new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec256KeyPair.privateKey);
+    return token.setNotBefore(Date.now()).hasSignature();
+  })()).resolves.toBe(false);
+  await expect((async () => {
+    const token = await new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec256KeyPair.privateKey);
+    return token.setPublicKey(ec256KeyPair.publicKey).hasSignature();
+  })()).resolves.toBe(false);
+  await expect((async () => {
+    const token = await new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec256KeyPair.privateKey);
+    return token.setSubject('sub').hasSignature();
+  })()).resolves.toBe(false);
+  await expect((async () => {
+    const token = await new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec256KeyPair.privateKey);
+    return token.setTokenClaims({
+      nonce: {
+        value: 'nonce',
+      },
+    }).hasSignature();
+  })()).resolves.toBe(false);
+});
+
+test('get IRT signature', async () => {
+  // Create keys.
+  const ec256KeyPair = await crypto.subtle.generateKey({
+    name: 'ECDSA', namedCurve: 'P-256', 
+  }, false, ['sign', 'verify']);
+
+  const iss = 'https://issuer.example.org';
+  const sub = 'subject';
+  const aud = 'audience';
+  const iat = 1679612400;
+  const exp = 1679616000;
+
+  // Test to throw if not signed.
+  expect(() => new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).getSignatureString()).toThrow();
+  expect(() => new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).getSignatureBytes()).toThrow();
+  // Test to not throw if signed.
+  await expect((async () => {
+    const token = await new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec256KeyPair.privateKey);
+    return token.getSignatureString();
+  })()).resolves.not.toThrow();
+  await expect((async () => {
+    const token = await new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec256KeyPair.privateKey);
+    return token.getSignatureBytes();
+  })()).resolves.not.toThrow();
+
+  // Test correct result.
+  const publicKeyJson = {
+    kty: 'RSA',
+    e: 'AQAB',
+    n: 'q8miK3ROI7yKEjkBot6q3MNsvpVhlaUzSs-37nWPlQ6t6C5s-2z-KZayU8_FMlmFSkuKpJ77v2zl-pJh3yDYbzxIS15SqsUrU4nF9gsozGAAHtaheXbQIqx9fZ-apNlv2ZmMGUWhKXvHsCHqopCaECkWBRMYrq3Lv1Qx-2CKc2Gqo6KxhtNaQ50sNOzUR9BbKO2BwS8iWo0Wj7HCLiN747VrSmiqRTJuQHD6SenNGsWzlqrOZk4HppN_k3h9llMPC0DeEdV0UsHoS_XgE4nam2lmtLZWyH4XW65VeexzyLCvMBh3rmS_XwOp3sHqJrlkRmx4Ht-U9pUpT_NFh-PKUQ',
+  };
+  const privateKeyJson = {
+    kty: 'RSA',
+    e: 'AQAB',
+    n: 'q8miK3ROI7yKEjkBot6q3MNsvpVhlaUzSs-37nWPlQ6t6C5s-2z-KZayU8_FMlmFSkuKpJ77v2zl-pJh3yDYbzxIS15SqsUrU4nF9gsozGAAHtaheXbQIqx9fZ-apNlv2ZmMGUWhKXvHsCHqopCaECkWBRMYrq3Lv1Qx-2CKc2Gqo6KxhtNaQ50sNOzUR9BbKO2BwS8iWo0Wj7HCLiN747VrSmiqRTJuQHD6SenNGsWzlqrOZk4HppN_k3h9llMPC0DeEdV0UsHoS_XgE4nam2lmtLZWyH4XW65VeexzyLCvMBh3rmS_XwOp3sHqJrlkRmx4Ht-U9pUpT_NFh-PKUQ',
+    d: 'FHZEuwzUNuUBBDkmlP4VV4zukcfs0vyVvro9xClcJCrWs6J-CDe8EXuZ-6oyqLPpkMctOT0Xqv4_aYiQoFmC9kL1sIaIbb9lEQMG4a8EGc3wjbvOiY-JrKujmfhOHQcqT76-pY756p1MFJKBpoH3W-fs78dNyBa6_2v5tSHTc_kytSqyrSTBuR5VsW9eIneb55DpbXzuD8ydsU_IfUsGRl7w2BNAGnZHtbA8Wp7jwnWjRAiliPj-Q96EzxpJXdKpwDV1HdQl5e3sxBWLHAUoX48TK1ADiIdJr9Odtgebw7w6VomLQNdbTwQr97wI7_uTNTuk0ngZJjH5ZQ8oDd6FHQ',
+    dp: 'V06nkmniGU5xcW2GE2SpIk4Z7hrH_jNYl0yEW1ZeCZUtsYnCIgASzLGrwQ2ue0donX8tWG8GCsuFSXSRhZblNuSEIw1sdpZkyQslAoZ0Aix3_mi4zjOniDFkdNAN7lDcx3qTLWEU40sYThRfFRDv0XzcT-tfho8rCovMn-mUCqk',
+    dq: 'SVcEfUq4kwubWbKiEKoi5V_wUpenF-5u-h9kq3UYN9zzFkdq6ASHGeipzXUIeDNfaDoifqT7UpWrHx9f2yzQKlgfBFTW6Nr6R9ljPLdUoAFhfhPKwrfHa9SsJ3TJyTuSYuAEibfRIiTEu6qF0_xu8bNqSXQerDL8mtmbR4DbzLE',
+    p: '6M3ODo4-ZzSg5vhu1Xgu5u57qKO3hCDRbVtX2HLBRoHGCHOyC6WkA_aBZJG7uVEuBsn4tHKO4d92Os5jo62z27AJvqWF7T1Xt1apAO6MdBQwBqxvpXhyHTcwlN5Cr5kfuupiMypKf3Kh38J5tqGUU2ASzFrnSwBJmF8RJDUexVU',
+    q: 'vOd4A7HSgBo5SDhM-2oAZcS8X4q-CKsIA6-oiRfSaWn-0zt0Q0jLdteCqEs83PwsObopYUR6GYaES0ih5Fu2V7zN2-YIwBG9TUR8-48BPa0HhTmE1aW2EMiAbIK6ozVH5xJ3dyEmiNAOfh8A_bqQ8dEx1RUhSTkJHSjpHJNUsQ0',
+    qi: 'aNHUZb8O8ryLdY9GoE1br5z7q6ycF_t8e71vLkKuXwo75HROIIRFnRoTtvnH0klbgv72YG1C7MZTjEXNi6w9gexwxmtvvuswjQx1Mrzy_5-fD386TTNprZt-D_lPrKHGqdCTKSwuOfpee9sjZuyaQjwmjZvZz2YwCdzbTcjIdgM',
+  };
+  const publicKey = await crypto.webcrypto.subtle.importKey('jwk', publicKeyJson, {
+    name: 'RSASSA-PKCS1-v1_5', hash: {
+      name: 'SHA-256', 
+    }, 
+  }, true, ['verify']);
+  const privateKey = await crypto.webcrypto.subtle.importKey('jwk', privateKeyJson, {
+    name: 'RSASSA-PKCS1-v1_5', hash: {
+      name: 'SHA-256', 
+    }, 
+  }, false, ['sign']);
+
+  const token = await new IctRequestToken().setPublicKey(publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(privateKey);
+  expect(token.getSignatureString()).toBe('HKzMC_giMs2Jo5MQ8mwoAr2INix3hLM_SwGQxClYwbLSrswTpl1xdtEzBKF2YwBerhAE04-lpha9w-7BepMAuD4KEAMaAd8ZsDCQW2pPz7dC5r2kusQHlkv_-bt_qVPjUbbV6jVp_S2ixSaM5Wyq0FgmFZ8uOFw1epRoxM8ViLyucSzlq2DcmjcH_v4WZ6E2s12Te_sYxJ-lV70vkUAD971oLNzBnxdiz-vYjAzMibyx4R9TIqYagak_KDVXfy-uKzRnh_nNHMOdwm-eGnqIhxHVjuWHy4-yxhxiUHypRGLvIxm0qeXsRc1ThG4Mc3xf_FTcS9nUGw9p1Tf2ouQazA');
+});
+
+test('get IRT token string', async () => {
+  // Create keys.
+  const ec256KeyPair = await crypto.subtle.generateKey({
+    name: 'ECDSA', namedCurve: 'P-256', 
+  }, false, ['sign', 'verify']);
+
+  const iss = 'https://issuer.example.org';
+  const sub = 'subject';
+  const aud = 'audience';
+  const iat = 1679612400;
+  const exp = 1679616000;
+
+  // Test to throw if not signed.
+  await expect(() => new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).getTokenString()).rejects.toThrow();
+  // Test to not throw if signed.
+  await expect((async () => {
+    const token = await new IctRequestToken().setPublicKey(ec256KeyPair.publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(ec256KeyPair.privateKey);
+    return token.getTokenString();
+  })()).resolves.not.toThrow();
+
+  // Test correct result.
+  const publicKeyJson = {
+    kty: 'RSA',
+    e: 'AQAB',
+    n: 'q8miK3ROI7yKEjkBot6q3MNsvpVhlaUzSs-37nWPlQ6t6C5s-2z-KZayU8_FMlmFSkuKpJ77v2zl-pJh3yDYbzxIS15SqsUrU4nF9gsozGAAHtaheXbQIqx9fZ-apNlv2ZmMGUWhKXvHsCHqopCaECkWBRMYrq3Lv1Qx-2CKc2Gqo6KxhtNaQ50sNOzUR9BbKO2BwS8iWo0Wj7HCLiN747VrSmiqRTJuQHD6SenNGsWzlqrOZk4HppN_k3h9llMPC0DeEdV0UsHoS_XgE4nam2lmtLZWyH4XW65VeexzyLCvMBh3rmS_XwOp3sHqJrlkRmx4Ht-U9pUpT_NFh-PKUQ',
+  };
+  const privateKeyJson = {
+    kty: 'RSA',
+    e: 'AQAB',
+    n: 'q8miK3ROI7yKEjkBot6q3MNsvpVhlaUzSs-37nWPlQ6t6C5s-2z-KZayU8_FMlmFSkuKpJ77v2zl-pJh3yDYbzxIS15SqsUrU4nF9gsozGAAHtaheXbQIqx9fZ-apNlv2ZmMGUWhKXvHsCHqopCaECkWBRMYrq3Lv1Qx-2CKc2Gqo6KxhtNaQ50sNOzUR9BbKO2BwS8iWo0Wj7HCLiN747VrSmiqRTJuQHD6SenNGsWzlqrOZk4HppN_k3h9llMPC0DeEdV0UsHoS_XgE4nam2lmtLZWyH4XW65VeexzyLCvMBh3rmS_XwOp3sHqJrlkRmx4Ht-U9pUpT_NFh-PKUQ',
+    d: 'FHZEuwzUNuUBBDkmlP4VV4zukcfs0vyVvro9xClcJCrWs6J-CDe8EXuZ-6oyqLPpkMctOT0Xqv4_aYiQoFmC9kL1sIaIbb9lEQMG4a8EGc3wjbvOiY-JrKujmfhOHQcqT76-pY756p1MFJKBpoH3W-fs78dNyBa6_2v5tSHTc_kytSqyrSTBuR5VsW9eIneb55DpbXzuD8ydsU_IfUsGRl7w2BNAGnZHtbA8Wp7jwnWjRAiliPj-Q96EzxpJXdKpwDV1HdQl5e3sxBWLHAUoX48TK1ADiIdJr9Odtgebw7w6VomLQNdbTwQr97wI7_uTNTuk0ngZJjH5ZQ8oDd6FHQ',
+    dp: 'V06nkmniGU5xcW2GE2SpIk4Z7hrH_jNYl0yEW1ZeCZUtsYnCIgASzLGrwQ2ue0donX8tWG8GCsuFSXSRhZblNuSEIw1sdpZkyQslAoZ0Aix3_mi4zjOniDFkdNAN7lDcx3qTLWEU40sYThRfFRDv0XzcT-tfho8rCovMn-mUCqk',
+    dq: 'SVcEfUq4kwubWbKiEKoi5V_wUpenF-5u-h9kq3UYN9zzFkdq6ASHGeipzXUIeDNfaDoifqT7UpWrHx9f2yzQKlgfBFTW6Nr6R9ljPLdUoAFhfhPKwrfHa9SsJ3TJyTuSYuAEibfRIiTEu6qF0_xu8bNqSXQerDL8mtmbR4DbzLE',
+    p: '6M3ODo4-ZzSg5vhu1Xgu5u57qKO3hCDRbVtX2HLBRoHGCHOyC6WkA_aBZJG7uVEuBsn4tHKO4d92Os5jo62z27AJvqWF7T1Xt1apAO6MdBQwBqxvpXhyHTcwlN5Cr5kfuupiMypKf3Kh38J5tqGUU2ASzFrnSwBJmF8RJDUexVU',
+    q: 'vOd4A7HSgBo5SDhM-2oAZcS8X4q-CKsIA6-oiRfSaWn-0zt0Q0jLdteCqEs83PwsObopYUR6GYaES0ih5Fu2V7zN2-YIwBG9TUR8-48BPa0HhTmE1aW2EMiAbIK6ozVH5xJ3dyEmiNAOfh8A_bqQ8dEx1RUhSTkJHSjpHJNUsQ0',
+    qi: 'aNHUZb8O8ryLdY9GoE1br5z7q6ycF_t8e71vLkKuXwo75HROIIRFnRoTtvnH0klbgv72YG1C7MZTjEXNi6w9gexwxmtvvuswjQx1Mrzy_5-fD386TTNprZt-D_lPrKHGqdCTKSwuOfpee9sjZuyaQjwmjZvZz2YwCdzbTcjIdgM',
+  };
+  const publicKey = await crypto.webcrypto.subtle.importKey('jwk', publicKeyJson, {
+    name: 'RSASSA-PKCS1-v1_5', hash: {
+      name: 'SHA-256', 
+    }, 
+  }, true, ['verify']);
+  const privateKey = await crypto.webcrypto.subtle.importKey('jwk', privateKeyJson, {
+    name: 'RSASSA-PKCS1-v1_5', hash: {
+      name: 'SHA-256', 
+    }, 
+  }, false, ['sign']);
+
+  const token = await new IctRequestToken().setPublicKey(publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(privateKey);
+  await expect(token.getTokenString()).resolves.toBe('eyJ0eXAiOiJKV1QrSVJUIiwiYWxnIjoiUlMyNTYiLCJqd2siOnsia3R5IjoiUlNBIiwibiI6InE4bWlLM1JPSTd5S0Vqa0JvdDZxM01Oc3ZwVmhsYVV6U3MtMzduV1BsUTZ0NkM1cy0yei1LWmF5VThfRk1sbUZTa3VLcEo3N3YyemwtcEpoM3lEWWJ6eElTMTVTcXNVclU0bkY5Z3NvekdBQUh0YWhlWGJRSXF4OWZaLWFwTmx2MlptTUdVV2hLWHZIc0NIcW9wQ2FFQ2tXQlJNWXJxM0x2MVF4LTJDS2MyR3FvNkt4aHROYVE1MHNOT3pVUjlCYktPMkJ3UzhpV28wV2o3SENMaU43NDdWclNtaXFSVEp1UUhENlNlbk5Hc1d6bHFyT1prNEhwcE5fazNoOWxsTVBDMERlRWRWMFVzSG9TX1hnRTRuYW0ybG10TFpXeUg0WFc2NVZlZXh6eUxDdk1CaDNybVNfWHdPcDNzSHFKcmxrUm14NEh0LVU5cFVwVF9ORmgtUEtVUSIsImUiOiJBUUFCIn19.eyJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlLm9yZyIsInN1YiI6InN1YmplY3QiLCJhdWQiOiJhdWRpZW5jZSIsImlhdCI6MTY3OTYxMjQwMCwiZXhwIjoxNjc5NjE2MDAwfQ.HKzMC_giMs2Jo5MQ8mwoAr2INix3hLM_SwGQxClYwbLSrswTpl1xdtEzBKF2YwBerhAE04-lpha9w-7BepMAuD4KEAMaAd8ZsDCQW2pPz7dC5r2kusQHlkv_-bt_qVPjUbbV6jVp_S2ixSaM5Wyq0FgmFZ8uOFw1epRoxM8ViLyucSzlq2DcmjcH_v4WZ6E2s12Te_sYxJ-lV70vkUAD971oLNzBnxdiz-vYjAzMibyx4R9TIqYagak_KDVXfy-uKzRnh_nNHMOdwm-eGnqIhxHVjuWHy4-yxhxiUHypRGLvIxm0qeXsRc1ThG4Mc3xf_FTcS9nUGw9p1Tf2ouQazA');
 });
