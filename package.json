@@ -39,8 +39,7 @@
   },
   "dependencies": {
     "@jonasprimbs/byte-array-converter": "^0.0.6",
-    "@types/node": "^18.15.5",
-    "jose": "^4.13.1"
+    "@types/node": "^18.15.5"
   },
   "devDependencies": {
     "@jest/globals": "^29.5.0",
