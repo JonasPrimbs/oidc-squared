@@ -1,4 +1,7 @@
+import { IrtClaimsSpecification } from './irt-claims-specification.interface';
+
 export interface IctRequestTokenPayload {
+
   /**
    * Issuer of the ID Certification Token.
    */
@@ -40,17 +43,7 @@ export interface IctRequestTokenPayload {
   exp: number;
 
   /**
-   * Desired lifetime of the requested ID Certification Token in seconds.
+   * Specification of desired claims in the requested ID Certification Token.
    */
-  token_lifetime?: number;
-
-  /**
-   * Desired nonce of the requested ID Certification Token.
-   */
-  token_nonce?: string;
-
-  /**
-   * Desired space-separated enumeration of claims in the requested ID Certification Token.
-   */
-  token_claims?: string;
+  token_claims?: IrtClaimsSpecification;
 }
