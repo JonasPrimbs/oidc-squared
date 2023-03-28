@@ -19,6 +19,6 @@ test('Custom Nonce Generator generates valid custom nonces', () => {
 test('creates Custom Nonce Generator of throwing generator function', () => {
   // Verify that Custom Nonce Generator whose generator throws an error, really throws an error.
   expect(() => new CustomNonceGenerator(() => {
-    throw 'error';
+    throw new Error('error');
   }).generate()).toThrow();
 });

@@ -10,10 +10,10 @@ export class Base64NonceGenerator extends NonceGenerator {
    */
   constructor(public readonly length: number) {
     if (!Number.isInteger(length)) {
-      throw 'Length must be a an integer value!';
+      throw new Error('Length must be a an integer value!');
     }
     if (length <= 0) {
-      throw `Length must be a positive number! Provided length: ${length}`;
+      throw new Error(`Length must be a positive number! Provided length: ${length}`);
     }
 
     super();
