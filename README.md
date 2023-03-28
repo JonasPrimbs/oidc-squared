@@ -33,7 +33,7 @@ npm install oidc-squared
 ```typescript
 import { IctRequestToken } from 'oidc-squared';
 
-// Create a sufficient key pair. Here for ES384:
+// Create a sufficient signing key pair. E.g., for ES384:
 const keyPair = await crypto.subtle.generateKey(
   { name: 'ECDSA', namedCurve: 'P-384' },
   false,
@@ -41,12 +41,21 @@ const keyPair = await crypto.subtle.generateKey(
 );
 
 const token = new IctRequestToken()             // Create new IRT.
-  .setPublicKey(keyPair.publicKey)              // Set public key.
-  .setIssuer('my_client_id')                    // Set issuer identifier. Typically your client ID.
-  .setSubject('my_user_id')                     // Set subject identifier. Typically your user ID.
-  .setAudience('https://issuer.example.org')    // Set audience(s) identifier(s). Typically your OpenID Provider's base URL.
-  .setIssuedAt()                                // Set issued at date to now.
-  .setExpirationTime((Date.now() / 1000) + 60); // Set the expiration date in 1 minute.
-await token.sign(privateKey);                   // Sign the IRT.
+  .setPublicKey(keyPair.publicKey)              // Set public key. (required)
+  .setIssuer('my_client_id')                    // Set issuer identifier, e.g., your client ID. (required)
+  .setSubject('my_user_id')                     // Set subject identifier, e.g., your user ID. (required)
+  .setAudience('https://issuer.example.org')    // Set audience(s) identifier(s), e.g., your OpenID Provider's base URL. (required)
+  .setIssuedAt()                                // Set issued at date to now (default) or provided timestamp. (required)
+  .setNotBefore()                               // Set not before date to issued at (if already set) date, now (default), or provided timestamp. (optional)
+  .setExpirationTime((Date.now() / 1000) + 60)  // Set the expiration date in 1 minute. (required)
+  .setJti()                                     // Set a JWT ID to a random UUID (default) or provided string. (optional)
+  .setNonce()                                   // Set a nonce to a random base64 string (default) or provided string. (optional)
+  .setTokenClaims({                             // Set desired claims for ID Certification Token. (optional)
+    nonce: {                                    // Request a nonce.
+      essential: true,                          // Make it essential to get a nonce.
+      value: 'my_random_nonce'                  // Set it to the value 'my_random_nonce'.
+    }
+  });
+await token.sign(privateKey);                   // Sign the IRT. (required)
 const irt = await token.getTokenString();       // Convert the token to JWT string.
 ```
