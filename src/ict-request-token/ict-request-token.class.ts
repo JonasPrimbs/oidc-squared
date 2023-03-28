@@ -1,10 +1,11 @@
 import * as crypto from 'crypto';
-import { SignJWT } from 'jose';
 import { encodeBase64url } from '@jonasprimbs/byte-array-converter';
 
 import { IctRequestTokenHeader } from './ict-request-token-header.interface';
 import { IctRequestTokenPayload } from './ict-request-token-payload.interface';
-import { NonceGenerator, NonceGenerators } from '../nonce-generators';
+import { IrtClaimSpecification } from './irt-claim-specification.interface';
+import { IrtClaimsSpecification } from './irt-claims-specification.interface';
+import { NonceGenerators } from '../nonce-generators';
 import { JwsSignatureAlgorithm } from '../types';
 
 export class IctRequestToken {
@@ -15,19 +16,14 @@ export class IctRequestToken {
   private publicKey?: crypto.webcrypto.CryptoKey;
 
   /**
-   * The signature as Base64URL encoded string.
+   * The signature.
    */
-  private signature?: string;
+  private signature?: Uint8Array;
 
   /**
    * The claims of the payload.
    */
   private readonly claims: Partial<IctRequestTokenPayload> = {};
-
-  /**
-   * The JWT object for the ICT Request Token.
-   */
-  private readonly jwt: SignJWT = new SignJWT(this.claims);
 
   /**
    * Sets the public key for the ICT Request Token.
@@ -37,15 +33,15 @@ export class IctRequestToken {
   setPublicKey(publicKey: crypto.webcrypto.CryptoKey): IctRequestToken {
     // Verify that provided key is a public key.
     if (publicKey.type !== 'public') {
-      throw 'Provided public key is not of type "public"!';
+      throw new Error('Provided public key is not of type "public"!');
     }
     // Verify that provided key is meant for signing.
     if (publicKey.usages.indexOf('verify') === -1) {
-      throw 'Provided public key has no usage "verify"!';
+      throw new Error('Provided public key has no usage "verify"!');
     }
     // Verify that provided key is extractable.
     if (!publicKey.extractable) {
-      throw 'Provided public key is not extactable!';
+      throw new Error('Provided public key is not extactable!');
     }
     // Verify that provided key has a sufficient algorithm name.
     switch (publicKey.algorithm.name) {
@@ -59,7 +55,7 @@ export class IctRequestToken {
       // RS256 / RS384 / RS512.
       break;
     default:
-      throw `Provided public key has an unsupported signing algorithm "${publicKey.algorithm.name}"!`;
+      throw new Error(`Provided public key has an unsupported signing algorithm "${publicKey.algorithm.name}"!`);
     }
 
     // Clear outdated signature.
@@ -110,11 +106,20 @@ export class IctRequestToken {
    * @returns The updated ICT Request Token instance.
    */
   setSubject(subject: string): IctRequestToken {
+    // Validate subject.
+    if (!isStringOrUri(subject)) {
+      throw new Error(`Invalid subject "${subject}"! Must be a valid URL since it contains a ':' character!`);
+    }
+    // Verify that subject is not empty.
+    if (subject === '') {
+      return this;
+    }
+
     // Clear outdated signature.
     this.signature = undefined;
 
     // Set the subject ("sub") claim.
-    this.jwt.setSubject(subject);
+    this.claims.sub = subject;
 
     return this;
   }
@@ -141,11 +146,32 @@ export class IctRequestToken {
    * @returns The updated ICT Request Token instance.
    */
   setAudience(audience: string | string[]): IctRequestToken {
+    // Convert input audience to string array.
+    const audArray = typeof audience === 'string' ? [ audience ] : [ ...audience ];
+    // Filter all insufficient audience values and duplicates from array.
+    const filteredAud = [...new Set(audArray.filter(a => a !== ''))];
+
+    // Do not change the audience if no sufficient audience is provided.
+    if (filteredAud.length === 0) {
+      return this;
+    }
+
+    // Verify validity of provided audiences.
+    const errorIndex = filteredAud.findIndex(a => !isStringOrUri(a));
+    // Throw error if any audience is invalid.
+    if (errorIndex >= 0) {
+      throw new Error(`Invalid audience "${audience[errorIndex]}"! Must be a valid URL since it contains a ':' character!`);
+    }
+
     // Clear outdated signature.
     this.signature = undefined;
 
-    // Set the audience ("aud") claim.
-    this.jwt.setAudience(audience);
+    // Set audience claim.
+    if (filteredAud.length === 1) {
+      this.claims.aud = filteredAud[0];
+    } else {
+      this.claims.aud = filteredAud;
+    }
 
     return this;
   }
@@ -168,8 +194,28 @@ export class IctRequestToken {
    * Gets the audience of the ICT Request Token.
    * @returns The provided audience.
    */
-  getAudience(): string | string[] | undefined {
-    return this.claims.aud;
+  getAudience(): string[] | undefined {
+    if (this.claims.aud === undefined) {
+      return undefined;
+    } else if (typeof this.claims.aud === 'string') {
+      return [ this.claims.aud ];
+    } else {
+      return [ ...this.claims.aud ];
+    }
+  }
+
+  /**
+   * Gets whether the ICT Request Token contains a specific audience.
+   * @param audience Audience to search for.
+   * @returns true = contains audience; false = does not contain audience.
+   */
+  containsAudience(audience: string): boolean {
+    const aud = this.getAudience();
+    if (aud === undefined) {
+      return false;
+    } else {
+      return aud.indexOf(audience) >= 0;
+    }
   }
 
   /**
@@ -178,11 +224,20 @@ export class IctRequestToken {
    * @returns The updated ICT Request Token instance.
    */
   setIssuer(issuer: string): IctRequestToken {
+    // Validate issuer.
+    if (!isStringOrUri(issuer)) {
+      throw new Error(`Invalid issuer "${issuer}"! Must be a valid URL since it contains a ':' character!`);
+    }
+    // Verify that issuer is not empty.
+    if (issuer === '') {
+      return this;
+    }
+
     // Clear outdated signature.
     this.signature = undefined;
 
     // Set the issuer ("iss") claim.
-    this.jwt.setIssuer(issuer);
+    this.claims.iss = issuer;
 
     return this;
   }
@@ -205,15 +260,20 @@ export class IctRequestToken {
 
   /**
    * Sets the "jti" (JSON Web Token ID) claim.
-   * @param jwtId JSON Web Token ID of the ICT Request Token. Typically a registered random string. Default is a newly generated UUID.
+   * @param jwtId JSON Web Token ID of the ICT Request Token. Typically a registered random string. If not provided, a random UUID will be generated.
    * @returns The updated ICT Request Token instance.
    */
   setJti(jwtId: string = NonceGenerators.uuid().generate()): IctRequestToken {
+    // Validate provided JWT Token ID.
+    if (jwtId === '') {
+      throw new Error('Invalid JWT Token ID (jti): Must be a unique string!');
+    }
+
     // Clear outdated signature.
     this.signature = undefined;
 
     // Set the JWT ID ("jti") claim.
-    this.jwt.setJti(jwtId);
+    this.claims.jti = jwtId;
 
     return this;
   }
@@ -236,13 +296,13 @@ export class IctRequestToken {
 
   /**
    * Sets the "nonce" (Nonce) claim.
-   * @param nonce Nonce of the ICT Request Token. Typically a random string.
+   * @param nonce Nonce of the ICT Request Token. Typically a random string. If not provided, a random 15 bytes long base64 string will be generated.
    * @returns The updated ICT Request Token instance.
    */
-  setNonce(nonce: string): IctRequestToken {
+  setNonce(nonce: string = NonceGenerators.base64(15).generate()): IctRequestToken {
     // Validate input value.
     if (!nonce) {
-      throw 'Nonce value must not be an empty string!';
+      throw new Error('Nonce value must not be an empty string!');
     }
 
     // Clear outdated signature.
@@ -271,36 +331,28 @@ export class IctRequestToken {
   }
 
   /**
-   * Generates and sets the "nonce" (Nonce) claim.
-   * @param nonceGenerator Nonce generator instance. Default is UUID nonce generator.
-   * @returns The updated ICT Request Token instance.
-   */
-  generateNonce(nonceGenerator: NonceGenerator = NonceGenerators.uuid()): IctRequestToken {
-    // Generate a nonce with the provided generator.
-    const nonce = nonceGenerator.generate();
-
-    // Set the nonce and return result.
-    return this.setNonce(nonce);
-  }
-
-  /**
    * Sets the "iat" (Issued at) claim.
    * @param issuedAt Issued at time as Date or as numbered unix timestamp with seconds precision. Default is current timestamp.
    * @returns The updated ICT Request Token instance.
    */
   setIssuedAt(issuedAt?: number | Date): IctRequestToken {
+    if (issuedAt instanceof Date) {
+      // Set UTC unix timestamp to issued at time.
+      this.claims.iat = issuedAt.getTime() / 1000;
+    } else if (typeof issuedAt === 'number') {
+      // Validate timestamp.
+      if (!isTimestamp(issuedAt)) {
+        throw new Error(`Invalid timestamp ${issuedAt}!`);
+      }
+      // Set provided UTC unix timestamp to issued at time.
+      this.claims.iat = issuedAt;
+    } else {
+      // Set current UTX unix timestamp to issued at time.
+      this.claims.iat = Math.floor(Date.now() / 1000);
+    }
+
     // Clear outdated signature.
     this.signature = undefined;
-
-    if (issuedAt instanceof Date) {
-      // Convert provided issued at date to UTC unix timestamp.
-      const issuedAtnumber = Math.floor(issuedAt.getTime() / 1000);
-      // Set UTC unix timestamp to issued at time.
-      this.jwt.setIssuedAt(issuedAtnumber);
-    } else {
-      // Set provided UTC unix timestamp to issued at time.
-      this.jwt.setIssuedAt(issuedAt);
-    }
 
     return this;
   }
@@ -339,21 +391,23 @@ export class IctRequestToken {
    * @returns The updated ICT Request Token instance.
    */
   setNotBefore(notBefore?: number | Date): IctRequestToken {
+    if (notBefore instanceof Date) {
+      // Set UTC unix timestamp to not before time.
+      this.claims.nbf = notBefore.getTime() / 1000;
+    } else if (typeof notBefore === 'number') {
+      // Validate timestamp.
+      if (!isTimestamp(notBefore)) {
+        throw new Error(`Invalid timestamp ${notBefore}!`);
+      }
+      // Set provided UTC unix timestamp to not before time.
+      this.claims.nbf = notBefore;
+    } else {
+      // Set issued at date if defined, otherwise current unix timestamp with seconds precision.
+      this.claims.nbf = this.getIssuedAt() ?? Math.round(Date.now() / 1000);
+    }
+
     // Clear outdated signature.
     this.signature = undefined;
-
-    if (notBefore === undefined) {
-      // Set issued at date if defined, otherwise current unix timestamp with seconds precision.
-      this.jwt.setNotBefore(this.getIssuedAt() ?? Math.round(Date.now() / 1000));
-    } else if (notBefore instanceof Date) {
-      // Convert provided not before date to UTC unix timestamp.
-      const notBeforenumber = Math.floor(notBefore.getTime() / 1000);
-      // Set UTC unix timestamp to not before time.
-      this.jwt.setNotBefore(notBeforenumber);
-    } else {
-      // Set provided UTC unix timestamp to not before time.
-      this.jwt.setNotBefore(notBefore);
-    }
 
     return this;
   }
@@ -392,18 +446,20 @@ export class IctRequestToken {
    * @returns The updated ICT Request Token instance.
    */
   setExpirationTime(expirationTime: number | Date): IctRequestToken {
+    if (expirationTime instanceof Date) {
+      // Set UTC unix timestamp to expiration time.
+      this.claims.exp = expirationTime.getTime() / 1000;
+    } else {
+      // Validate timestamp.
+      if (!isTimestamp(expirationTime)) {
+        throw new Error(`Invalid timestamp ${expirationTime}!`);
+      }
+      // Set provided UTC unix timestamp to expiration time.
+      this.claims.exp = expirationTime;
+    }
+
     // Clear outdated signature.
     this.signature = undefined;
-
-    if (expirationTime instanceof Date) {
-      // Convert provided expiration time to UTC unix timestamp.
-      const expirationTimenumber = Math.floor(expirationTime.getTime() / 1000);
-      // Set UTC unix timestamp to expiration time.
-      this.jwt.setExpirationTime(expirationTimenumber);
-    } else {
-      // Set provided UTC unix timestamp to expiration time.
-      this.jwt.setNotBefore(expirationTime);
-    }
 
     return this;
   }
@@ -437,115 +493,69 @@ export class IctRequestToken {
   }
 
   /**
-   * Sets the "token_lifetime" (desired lifetime of the ID Certification Token) claim.
-   * @param tokenLifetime Desired lifetime of the requested ID Certification Token.
-   * @returns The updated ICT Request Token instance.
-   */
-  setTokenLifetime(tokenLifetime: number): IctRequestToken {
-    // Validate input value.
-    if (tokenLifetime < 0) {
-      throw 'Negative token lifetime not allowed!';
-    }
-    if (!Number.isInteger(tokenLifetime)) {
-      throw 'Token lifetime must be an integer!';
-    }
-
-    // Clear outdated signature.
-    this.signature = undefined;
-
-    // Set the token lifetime ("token_lifetime") claim.
-    this.claims.token_lifetime = tokenLifetime;
-
-    return this;
-  }
-
-  /**
-   * Indicates whether the token lifetime is provided.
-   * @returns true = has a token lifetime; false = has no token lifetime.
-   */
-  hasTokenLifetime(): boolean {
-    return !!this.claims.token_lifetime;
-  }
-
-  /**
-   * Gets the token lifetime of the ICT Request Token.
-   * @returns The provided token lifetime.
-   */
-  getTokenLifetime(): number | undefined {
-    return this.claims.token_lifetime;
-  }
-
-  /**
-   * Sets the "token_nonce" (desired nonce of the ID Certification Token) claim.
-   * @param tokenNonce Desired token nonce of the requested ID Certification Token.
-   * @returns The updated ICT Request Token instance.
-   */
-  setTokenNonce(tokenNonce: string): IctRequestToken {
-    // Validate input value.
-    if (!tokenNonce) {
-      throw 'Token nonce must not be an empty string!';
-    }
-
-    // Clear outdated signature.
-    this.signature = undefined;
-
-    // Set the token nonce ("token_nonce") claim.
-    this.claims.token_nonce = tokenNonce;
-
-    return this;
-  }
-
-  /**
-   * Generates and sets the "token_nonce" (Token nonce) claim.
-   * @param nonceGenerator Nonce generator instance. Default is UUID nonce generator.
-   * @returns The updated ICT Request Token instance.
-   */
-  generateTokenNonce(nonceGenerator: NonceGenerator = NonceGenerators.uuid()): IctRequestToken {
-    // Generate a token nonce with the provided generator.
-    const tokenNonce = nonceGenerator.generate();
-    
-    // Set the token nonce and return the result.
-    return this.setTokenNonce(tokenNonce);
-  }
-
-  /**
-   * Indicates whether the token nonce is provided.
-   * @returns true = has a token nonce; false = has no token nonce.
-   */
-  hasTokenNonce(): boolean {
-    return !!this.claims.token_nonce;
-  }
-
-  /**
-   * Gets the token nonce of the ICT Request Token.
-   * @returns The provided token nonce.
-   */
-  getTokenNonce(): string | undefined {
-    return this.claims.token_nonce;
-  }
-
-  /**
    * Sets the "token_claims" (desired identity claims for the ID Certification Token) claim.
    * @param claims Enumeration of desired identity claims for the requested ID Certification Token. Duplicates and empty strings will be omitted. If no claim is provided, the call will be ignored.
    * @returns The updated ICT Request Token instance.
    */
-  setTokenClaims(...claims: string[]): IctRequestToken {
-    // Verify that string is not empty.
-    if (claims.length === 0) {
+  setTokenClaims(claims: IrtClaimsSpecification): IctRequestToken {
+    // Verify that length is not empty.
+    if (Object.keys(claims).length === 0) {
       return this;
     }
 
-    // Filter empty strings and duplicates.
-    const filteredClaims = [...new Set(claims.filter(c => !!c))];
+    // Create new instance of the claims specification.
+    const claimsSpecification: IrtClaimsSpecification = {};
 
-    // Reduce array to space-separated strings.
-    const claimsstring = filteredClaims.join(' ');
+    // Validate claims.
+    for (const claimName in claims) {
+      // Get claim value.
+      const claimValue = claims[claimName];
+
+      // Copy claim value if null.
+      if (claimValue === null) {
+        claimsSpecification[claimName] = null;
+        continue;
+      }
+
+      // Create a new ID Certification Request Token claim specification.
+      const claimSpecification: IrtClaimSpecification = {
+        essential: claimValue.essential === true,
+      };
+
+      // Validate desired values.
+      if (claimValue.values !== undefined) {
+        // Verify that value and values is not defined both.
+        if (claimValue.value !== undefined) {
+          throw new Error('Either "value", "values", or both must not be defined!');
+        }
+
+        // Filter all irrelevant values.
+        const filteredValues = [...new Set(claimValue.values.filter(v => v !== '' && v !== undefined)) ];
+
+        if (filteredValues.length === 1) {
+          // Make 'values' array with one value to the 'value' attribute. 
+          claimSpecification.value = JSON.parse(JSON.stringify(filteredValues[0]));
+        } else if (filteredValues.length > 0) {
+          // Copy remaining values into new values array.
+          claimSpecification.values = [];
+          for (const value of filteredValues) {
+            claimSpecification.values.push(JSON.parse(JSON.stringify(value)));
+          }
+        }
+      } else if (claimValue.value !== undefined) {
+        // Copy 'value' attribute if sufficient.
+        claimSpecification.value = JSON.parse(JSON.stringify(claimValue.value));
+      }
+
+      // Make created claim specification the new specification of the current claim.
+      claimsSpecification[claimName] = claimSpecification;
+    }
 
     // Clear outdated signature.
     this.signature = undefined;
 
     // Set the token claims ("token_claims") value.
-    this.claims.token_claims = claimsstring;
+    this.claims.token_claims = claimsSpecification;
 
     return this;
   }
@@ -562,8 +572,13 @@ export class IctRequestToken {
    * Gets the token claims of the ICT Request Token.
    * @returns The provided token claims.
    */
-  getTokenClaims(): string[] | undefined {
-    return this.claims.token_claims?.split(' ');
+  getTokenClaims(): IrtClaimsSpecification | undefined {
+    if (this.claims.token_claims === undefined) {
+      return undefined;
+    }
+
+    // Return a deep copy of the set token claims.
+    return JSON.parse(JSON.stringify(this.claims.token_claims));
   }
 
   /**
@@ -571,14 +586,17 @@ export class IctRequestToken {
    * @returns The ICT Request Token header as object.
    */
   async getHeaderObject(): Promise<IctRequestTokenHeader> {
-    if (!this.publicKey) {
-      throw 'Public key missing!';
+    const publicKey = this.publicKey;
+    if (!publicKey) {
+      throw new Error('Public key missing!');
     }
+
+    const key = await crypto.subtle.exportKey('jwk', publicKey);
 
     return {
       typ: 'JWT+IRT',
-      alg: getSufficientSignatureAlgorithm(this.publicKey),
-      jwk: await crypto.subtle.exportKey('jwk', this.publicKey),
+      alg: getSufficientSignatureAlgorithm(publicKey),
+      jwk: key,
     };
   }
 
@@ -598,37 +616,35 @@ export class IctRequestToken {
   getPayloadObject(): IctRequestTokenPayload {
     // Verify that issuer is set.
     if (!this.claims.iss) {
-      throw 'No issuer set!';
+      throw new Error('No issuer set!');
     }
     // Verify that subject is set.
     if (!this.claims.sub) {
-      throw 'No subject set!';
+      throw new Error('No subject set!');
     }
     // Verify that audience is set.
     if (!this.claims.aud) {
-      throw 'No audience set!';
+      throw new Error('No audience set!');
     }
     // Verify that date is set.
     if (!this.claims.iat) {
-      throw 'No issued at date set!';
+      throw new Error('No issued at date set!');
     }
     // Verify that expiration date is set.
     if (!this.claims.exp) {
-      throw 'No expiration date set!';
+      throw new Error('No expiration date set!');
     }
 
-    // Return payoad.
+    // Return payload.
     return {
       iss: this.claims.iss,
       sub: this.claims.sub,
       aud: this.claims.aud,
-      jti: this.claims.jti,
-      nonce: this.claims.nonce,
       iat: this.claims.iat,
       nbf: this.claims.nbf,
       exp: this.claims.exp,
-      token_lifetime: this.claims.token_lifetime,
-      token_nonce: this.claims.token_nonce,
+      jti: this.claims.jti,
+      nonce: this.claims.nonce,
       token_claims: this.claims.token_claims,
     };
   }
@@ -652,6 +668,19 @@ export class IctRequestToken {
     return `${header}.${payload}`;
   }
 
+  async getHeaderAndPayloadBytes(): Promise<Uint8Array> {
+    // Generate header and payload string.
+    const headerAndPayloadString = await this.getHeaderAndPayloadString();
+
+    // Convert string to ASCII encoded bytes.
+    const asciiBytes = [];
+    for (let i = 0; i < headerAndPayloadString.length; i++) {
+      asciiBytes[i] = headerAndPayloadString.charCodeAt(i);
+    }
+
+    return new Uint8Array(asciiBytes);
+  }
+
   /**
    * Signs an ICT Request Token.
    * @param privateKey The private key to sign the ICT Request Token with.
@@ -660,24 +689,27 @@ export class IctRequestToken {
   async sign(privateKey: crypto.webcrypto.CryptoKey): Promise<IctRequestToken> {
     // Verify that provided key is a public key.
     if (privateKey.type !== 'private') {
-      throw 'Provided private key is not of type "private"!';
+      throw new Error('Provided private key is not of type "private"!');
     }
     // Verify that provided key is meant for signing.
     if (privateKey.usages.indexOf('sign') === -1) {
-      throw 'Provided private key has no usage "sign"!';
+      throw new Error('Provided private key has no usage "sign"!');
     }
     // Verify that the public key is provided.
     if (!this.publicKey) {
-      throw 'No public key provided!';
+      throw new Error('No public key provided!');
     }
     // Verify that provided key has a sufficient algorithm name.
     if (privateKey.algorithm.name !== this.publicKey.algorithm.name) {
-      throw `Provided private key signing algorithm "${privateKey.algorithm.name}" does not match the set public key signing algorithm "${this.publicKey.algorithm.name}"!`;
+      throw new Error(`Provided private key signing algorithm "${privateKey.algorithm.name}" does not match the set public key signing algorithm "${this.publicKey.algorithm.name}"!`);
     }
 
-    // TODO: implement signing of the JWT.
-    const jwt = await this.jwt.sign(privateKey);
-    this.signature = jwt.split('.')[2];
+    // Generate header and payload as ASCII encoded byte string.
+    const dataBuffer = await this.getHeaderAndPayloadBytes();
+
+    // Sign the ASCII encoded bytes.
+    const arrayBuffer = await crypto.webcrypto.subtle.sign(privateKey.algorithm.name, privateKey, dataBuffer);
+    this.signature = new Uint8Array(arrayBuffer);
 
     return this;
   }
@@ -688,10 +720,10 @@ export class IctRequestToken {
    */
   getSignatureString(): string {
     if (!this.signature) {
-      throw 'Token not signed!';
+      throw new Error('Token not signed!');
     }
 
-    return this.signature;
+    return encodeBase64url(this.signature);
   }
 
   /**
@@ -700,7 +732,7 @@ export class IctRequestToken {
    */
   async getTokenString(): Promise<string> {
     if (!this.signature) {
-      throw 'Token not signed!';
+      throw new Error('Token not signed!');
     }
 
     // Generate header and payload string to sign.
@@ -759,7 +791,7 @@ function getSufficientSignatureAlgorithm(key: crypto.webcrypto.CryptoKey): JwsSi
     case 'P-521':
       return 'ES512';
     default:
-      throw `Unsupported curve name ${esAlgorithm.namedCurve}`;
+      throw new Error(`Unsupported curve name ${esAlgorithm.namedCurve}`);
     }
   }
   // RSA Probablistic Signing Scheme: (PS256 / PS384 / PS512)
@@ -773,7 +805,7 @@ function getSufficientSignatureAlgorithm(key: crypto.webcrypto.CryptoKey): JwsSi
     case 'SHA-512':
       return 'RS512';
     default:
-      throw `Unsupported hash algorithm name ${psAlgorithm.hash}`;
+      throw new Error(`Unsupported hash algorithm name ${psAlgorithm.hash}`);
     }
   }
   // RSA Public Key Cryptography Standard: (RS256 / RS384 / RS512)
@@ -787,10 +819,30 @@ function getSufficientSignatureAlgorithm(key: crypto.webcrypto.CryptoKey): JwsSi
     case 'SHA-512':
       return 'RS512';
     default:
-      throw `Unsupported hash algorithm name ${rsAlgorithm.hash}`;
+      throw new Error(`Unsupported hash algorithm name ${rsAlgorithm.hash}`);
     }
   }
   default:
-    throw `Unsupported algorithm name ${key.algorithm.name}`;
+    throw new Error(`Unsupported algorithm name ${key.algorithm.name}`);
   }
+}
+
+/**
+ * Validates a string to be a StringOrUri.
+ * @param str String to validate.
+ * @returns true = valid StringOrUri; false = no valid StringOrUri.
+ */
+function isStringOrUri(str: string): boolean {
+  if (str.indexOf(':') >= 0) {
+    try {
+      new URL(str);
+    } catch (error) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isTimestamp(timestamp: number): boolean {
+  return timestamp >= 0 && Number.isFinite(timestamp);
 }
