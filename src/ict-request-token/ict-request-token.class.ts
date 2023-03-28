@@ -592,10 +592,13 @@ export class IctRequestToken {
     }
 
     const key = await crypto.subtle.exportKey('jwk', publicKey);
+    delete key.key_ops;
+    delete key.ext;
+    delete key.alg;
 
     return {
       typ: 'JWT+IRT',
-      alg: getSufficientSignatureAlgorithm(publicKey),
+      alg: getSufficientSignatureAlgorithmName(publicKey),
       jwk: key,
     };
   }
@@ -703,15 +706,56 @@ export class IctRequestToken {
     if (privateKey.algorithm.name !== this.publicKey.algorithm.name) {
       throw new Error(`Provided private key signing algorithm "${privateKey.algorithm.name}" does not match the set public key signing algorithm "${this.publicKey.algorithm.name}"!`);
     }
+    switch (privateKey.algorithm.name) {
+    case 'ECDSA': {
+      const ecPrivateKey = privateKey.algorithm as EcKeyAlgorithm;
+      const ecPublicKey = this.publicKey.algorithm as EcKeyAlgorithm;
+      if (ecPrivateKey.namedCurve !== ecPublicKey.namedCurve) {
+        throw new Error(`Private key's named curve "${ecPrivateKey.namedCurve}" does not match the provided public key's named curve "${ecPublicKey.namedCurve}"`);
+      }
+      break;
+    }
+    case 'RSA-PSS':
+    case 'RSASSA-PKCS1-v1_5': {
+      const rsaPrivateKey = privateKey.algorithm as RsaKeyAlgorithm;
+      const rsaPublicKey = this.publicKey.algorithm as RsaKeyAlgorithm;
+      if (rsaPrivateKey.modulusLength !== rsaPublicKey.modulusLength) {
+        throw new Error(`Private key's named curve "${rsaPrivateKey.modulusLength}" does not match the provided public key's named curve "${rsaPublicKey.modulusLength}"`);
+      }
+      break;
+    }
+    default:
+      throw new Error('Invalid private key algorithm');
+    }
 
     // Generate header and payload as ASCII encoded byte string.
     const dataBuffer = await this.getHeaderAndPayloadBytes();
 
     // Sign the ASCII encoded bytes.
-    const arrayBuffer = await crypto.webcrypto.subtle.sign(privateKey.algorithm.name, privateKey, dataBuffer);
+    const arrayBuffer = await crypto.webcrypto.subtle.sign(getSufficientSignatureAlgorithm(privateKey), privateKey, dataBuffer);
     this.signature = new Uint8Array(arrayBuffer);
 
     return this;
+  }
+
+  /**
+   * Indicates whether the token has a signature.
+   * @returns true = has signature; false = has no signature.
+   */
+  hasSignature(): boolean {
+    return !!this.signature;
+  }
+
+  /**
+   * Gets the signature of header and payload.
+   * @returns Signature of header and payload as Uint8Array.
+   */
+  getSignatureBytes(): Uint8Array {
+    if (!this.signature) {
+      throw new Error('Token not signed!');
+    }
+
+    return this.signature;
   }
 
   /**
@@ -723,7 +767,16 @@ export class IctRequestToken {
       throw new Error('Token not signed!');
     }
 
-    return encodeBase64url(this.signature);
+    if (typeof window !== 'undefined') {
+      const array = Array.from(this.signature);
+      const arrayStr = String.fromCharCode.apply(null, array);
+      const base64Str = window.btoa(arrayStr);
+      return base64Str.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    } else {
+      return Buffer.from(this.signature).toString('base64url');
+    }
+
+    // return encodeBase64url(this.signature);
   }
 
   /**
@@ -737,8 +790,10 @@ export class IctRequestToken {
 
     // Generate header and payload string to sign.
     const headerAndPayloadString = await this.getHeaderAndPayloadString();
+    // Generate signature string.
+    const signatureString = this.getSignatureString();
 
-    return `${headerAndPayloadString}.${this.signature}`;
+    return `${headerAndPayloadString}.${signatureString}`;
   }
 }
 
@@ -778,7 +833,7 @@ function objectToBase64Url(obj: object): string {
  * @param key An asymmetric key.
  * @returns A sufficient signing algorithm.
  */
-function getSufficientSignatureAlgorithm(key: crypto.webcrypto.CryptoKey): JwsSignatureAlgorithm {
+function getSufficientSignatureAlgorithmName(key: crypto.webcrypto.CryptoKey): JwsSignatureAlgorithm {
   switch (key.algorithm.name) {
   // Elliptic Curve: (ES256 / ES384 / ES512)
   case 'ECDSA': {
@@ -809,7 +864,7 @@ function getSufficientSignatureAlgorithm(key: crypto.webcrypto.CryptoKey): JwsSi
     }
   }
   // RSA Public Key Cryptography Standard: (RS256 / RS384 / RS512)
-  case 'RSASSA-PKCS-v1_5': {
+  case 'RSASSA-PKCS1-v1_5': {
     const rsAlgorithm = key.algorithm as crypto.webcrypto.RsaHashedKeyAlgorithm;
     switch (rsAlgorithm.hash.name) {
     case 'SHA-256':
@@ -821,6 +876,74 @@ function getSufficientSignatureAlgorithm(key: crypto.webcrypto.CryptoKey): JwsSi
     default:
       throw new Error(`Unsupported hash algorithm name ${rsAlgorithm.hash}`);
     }
+  }
+  default:
+    throw new Error(`Unsupported algorithm name ${key.algorithm.name}`);
+  }
+}
+
+/**
+ * Gets a sufficient signing algorithm for a provided asymmetric key.
+ * @param key An asymmetric key.
+ * @returns A sufficient signing algorithm.
+ */
+function getSufficientSignatureAlgorithm(key: crypto.webcrypto.CryptoKey): AlgorithmIdentifier | RsaPssParams | EcdsaParams {
+  switch (key.algorithm.name) {
+  // Elliptic Curve: (ES256 / ES384 / ES512)
+  case 'ECDSA': {
+    const esAlgorithm = key.algorithm as crypto.webcrypto.EcKeyAlgorithm;
+    switch (esAlgorithm.namedCurve) {
+    case 'P-256':
+      return {
+        name: 'ECDSA',
+        hash: {
+          name: 'SHA-256',
+        },
+      };
+    case 'P-384':
+      return {
+        name: 'ECDSA',
+        hash: {
+          name: 'SHA-384',
+        },
+      };
+    case 'P-521':
+      return {
+        name: 'ECDSA',
+        hash: {
+          name: 'SHA-512',
+        },
+      };
+    default:
+      throw new Error(`Unsupported curve name ${esAlgorithm.namedCurve}`);
+    }
+  }
+  // RSA Probablistic Signing Scheme: (PS256 / PS384 / PS512)
+  case 'RSA-PSS': {
+    const psAlgorithm = key.algorithm as crypto.webcrypto.RsaHashedKeyAlgorithm;
+    switch (psAlgorithm.hash.name) {
+    case 'SHA-256':
+      return {
+        name: 'RSA-PSS',
+        saltLength: 32,
+      };
+    case 'SHA-384':
+      return {
+        name: 'RSA-PSS',
+        saltLength: 48,
+      };
+    case 'SHA-512':
+      return {
+        name: 'RSA-PSS',
+        saltLength: 64,
+      };
+    default:
+      throw new Error(`Unsupported hash algorithm name ${psAlgorithm.hash}`);
+    }
+  }
+  // RSA Public Key Cryptography Standard: (RS256 / RS384 / RS512)
+  case 'RSASSA-PKCS1-v1_5': {
+    return 'RSASSA-PKCS1-v1_5';
   }
   default:
     throw new Error(`Unsupported algorithm name ${key.algorithm.name}`);
@@ -843,6 +966,11 @@ function isStringOrUri(str: string): boolean {
   return true;
 }
 
+/**
+ * Validates a timestamp.
+ * @param timestamp Timestamp to validate.
+ * @returns true = valid timestamp; false = invalid timestamp.
+ */
 function isTimestamp(timestamp: number): boolean {
   return timestamp >= 0 && Number.isFinite(timestamp);
 }
