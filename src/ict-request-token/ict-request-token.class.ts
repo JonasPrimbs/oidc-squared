@@ -767,16 +767,7 @@ export class IctRequestToken {
       throw new Error('Token not signed!');
     }
 
-    if (typeof window !== 'undefined') {
-      const array = Array.from(this.signature);
-      const arrayStr = String.fromCharCode.apply(null, array);
-      const base64Str = window.btoa(arrayStr);
-      return base64Str.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-    } else {
-      return Buffer.from(this.signature).toString('base64url');
-    }
-
-    // return encodeBase64url(this.signature);
+    return encodeBase64url(this.signature);
   }
 
   /**
