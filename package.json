@@ -38,7 +38,7 @@
     "lint-fix": "eslint . --fix"
   },
   "dependencies": {
-    "@jonasprimbs/byte-array-converter": "^0.0.6",
+    "@jonasprimbs/byte-array-converter": "^0.0.7",
     "@types/node": "^18.15.5"
   },
   "devDependencies": {
