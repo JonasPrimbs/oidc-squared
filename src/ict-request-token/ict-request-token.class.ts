@@ -1,5 +1,5 @@
 import * as crypto from 'crypto';
-import { encodeBase64url } from '@jonasprimbs/byte-array-converter';
+import { decodeBase64url, encodeBase64url } from '@jonasprimbs/byte-array-converter';
 
 import { IctRequestTokenHeader } from './ict-request-token-header.interface';
 import { IctRequestTokenPayload } from './ict-request-token-payload.interface';
@@ -9,6 +9,19 @@ import { NonceGenerators } from '../nonce-generators';
 import { JwsSignatureAlgorithm } from '../types';
 
 export class IctRequestToken {
+
+  /**
+   * Gets an ICT Request Token from an ICT Request Token string.
+   * @param tokenString ICT Request Token string.
+   * @returns Parsed ICT Request Token.
+   */
+  static async fromTokenString(tokenString: string): Promise<IctRequestToken> {
+    const [ header, payload, signature ] = tokenString.split('.');
+
+    return (await new IctRequestToken().setHeader(header))
+      .setPayloadString(payload)
+      .setSignatureString(signature);
+  }
 
   /**
    * The public key to prove possession of.
@@ -24,6 +37,39 @@ export class IctRequestToken {
    * The claims of the payload.
    */
   private readonly claims: Partial<IctRequestTokenPayload> = {};
+
+  /**
+   * Sets the header.
+   * @param headerString Base64URL encoded JWT header.
+   * @returns ICT Request Token with header.
+   */
+  private async setHeader(headerString: string): Promise<IctRequestToken> {
+    const headerObj = base64UrlToObject(headerString) as Partial<IctRequestTokenHeader>;
+
+    if (headerObj.typ === undefined) {
+      throw new Error('No token type provided!');
+    } else if (headerObj.typ !== 'JWT+IRT') {
+      throw new Error(`Invalid token type "${headerObj.typ}"! Expected token type "JWT+IRT" for ICT Request Token!`);
+    }
+
+    if (headerObj.alg === undefined) {
+      throw new Error('No signature algorithm provided!');
+    }
+    if (headerObj.jwk === undefined) {
+      throw new Error('No public key provided!');
+    }
+
+    const publicKey = await crypto.webcrypto.subtle.importKey(
+      'jwk',
+      headerObj.jwk,
+      getSignatureAlgorithmImportParameterFromName(headerObj.alg),
+      true,
+      ['verify']
+    );
+    this.setPublicKey(publicKey);
+
+    return this;
+  }
 
   /**
    * Sets the public key for the ICT Request Token.
@@ -98,6 +144,62 @@ export class IctRequestToken {
     } else {
       return await crypto.subtle.exportKey(format, this.publicKey) as KeyExportType<T>;
     }
+  }
+
+  /**
+   * Sets all claims.
+   * @param claims Claims to set.
+   */
+  private setClaims(claims: Partial<IctRequestTokenPayload>): void {
+    if (claims.aud === undefined) {
+      throw new MissingClaimError('Audience', 'aud');
+    } else {
+      this.setAudience(claims.aud);
+    }
+    if (claims.exp === undefined) {
+      throw new MissingClaimError('Expiration time', 'exp');
+    } else {
+      this.setExpirationTime(claims.exp);
+    }
+    if (claims.iat === undefined) {
+      throw new MissingClaimError('Issued at', 'iat');
+    } else {
+      this.setIssuedAt(claims.iat);
+    }
+    if (claims.iss === undefined) {
+      throw new MissingClaimError('Issuer', 'iss');
+    } else {
+      this.setIssuer(claims.iss);
+    }
+    if (claims.sub === undefined) {
+      throw new MissingClaimError('Subject', 'sub');
+    } else {
+      this.setSubject(claims.sub);
+    }
+    if (claims.jti !== undefined) {
+      this.setJti(claims.jti);
+    }
+    if (claims.nbf !== undefined) {
+      this.setNotBefore(claims.nbf);
+    }
+    if (claims.nonce !== undefined) {
+      this.setNonce(claims.nonce);
+    }
+    if (claims.token_claims !== undefined) {
+      this.setTokenClaims(claims.token_claims);
+    }
+  }
+
+  /**
+   * Sets the payload.
+   * @param payloadString Base64URL encoded JWT payload.
+   * @returns ICT Request Token with payload.
+   */
+  private setPayloadString(payloadString: string): IctRequestToken {
+    const payloadObj = base64UrlToObject(payloadString) as Partial<IctRequestTokenPayload>;
+    this.setClaims(payloadObj);
+
+    return this;
   }
 
   /**
@@ -671,6 +773,10 @@ export class IctRequestToken {
     return `${header}.${payload}`;
   }
 
+  /**
+   * Gets the ICT Request Token header and payload to be used as input for signing.
+   * @returns The ICT Request Token header and payload to be used as input for signing.
+   */
   async getHeaderAndPayloadBytes(): Promise<Uint8Array> {
     // Generate header and payload string.
     const headerAndPayloadString = await this.getHeaderAndPayloadString();
@@ -734,6 +840,17 @@ export class IctRequestToken {
     // Sign the ASCII encoded bytes.
     const arrayBuffer = await crypto.webcrypto.subtle.sign(getSufficientSignatureAlgorithm(privateKey), privateKey, dataBuffer);
     this.signature = new Uint8Array(arrayBuffer);
+
+    return this;
+  }
+
+  /**
+   * Sets the signature.
+   * @param signature Base64URL encoded JWT signature.
+   * @returns ICT Request Token with signature.
+   */
+  private setSignatureString(signature: string): IctRequestToken {
+    this.signature = decodeBase64url(signature);
 
     return this;
   }
@@ -809,6 +926,16 @@ function stringToUtf8Array(str: string): Uint8Array {
 }
 
 /**
+ * Decodes an UTF8 encoded byte array to a string.
+ * @param data UTF8 encoded byte array.
+ * @returns Decoded UTF8 string.
+ */
+function utf8ArrayToString(data: Uint8Array): string {
+  const decoder = new TextDecoder();
+  return decoder.decode(data);
+}
+
+/**
  * Serializes an object with JSON and encodes the string Base64URL.
  * @param obj Object to convert.
  * @returns JSON-serialized and Base64URL encoded object as string.
@@ -817,6 +944,17 @@ function objectToBase64Url(obj: object): string {
   const json = JSON.stringify(obj);
   const utf8 = stringToUtf8Array(json);
   return encodeBase64url(utf8);
+}
+
+/**
+ * Decodes a Base64URL encoded string to a JSON object.
+ * @param base64url Base64URL encoded JSON object.
+ * @returns JSON Object.
+ */
+function base64UrlToObject(base64url: string): object {
+  const utf8 = decodeBase64url(base64url);
+  const json = utf8ArrayToString(utf8);
+  return JSON.parse(json);
 }
 
 /**
@@ -942,6 +1080,63 @@ function getSufficientSignatureAlgorithm(key: crypto.webcrypto.CryptoKey): Algor
 }
 
 /**
+ * Gets the import parameter of an algorithm by its JWS name.
+ * @param algorithmName Name of signature algorithm.
+ * @returns Signature algorithm import parameter.
+ */
+function getSignatureAlgorithmImportParameterFromName(algorithmName: JwsSignatureAlgorithm): AlgorithmIdentifier | RsaHashedImportParams | EcKeyImportParams {
+  switch (algorithmName) {
+  case 'ES256':
+    return {
+      name: 'ECDSA',
+      namedCurve: 'P-256',
+    };
+  case 'ES384':
+    return {
+      name: 'ECDSA',
+      namedCurve: 'P-384',
+    };
+  case 'ES512':
+    return {
+      name: 'ECDSA',
+      namedCurve: 'P-521',
+    };
+  case 'RS256':
+    return {
+      name: 'RSASSA-PKCS1-v1_5',
+      hash: 'SHA-256',
+    };
+  case 'RS384':
+    return {
+      name: 'RSASSA-PKCS1-v1_5',
+      hash: 'SHA-384',
+    };
+  case 'RS512':
+    return {
+      name: 'RSASSA-PKCS1-v1_5',
+      hash: 'SHA-512',
+    };
+  case 'PS256':
+    return {
+      name: 'RSA-PSS',
+      hash: 'SHA-256',
+    };
+  case 'PS384':
+    return {
+      name: 'RSA-PSS',
+      hash: 'SHA-384',
+    };
+  case 'PS512':
+    return {
+      name: 'RSA-PSS',
+      hash: 'SHA-512',
+    };
+  default:
+    throw new Error(`Invalid signing algorithm name "${algorithmName}"!`);
+  }
+}
+
+/**
  * Validates a string to be a StringOrUri.
  * @param str String to validate.
  * @returns true = valid StringOrUri; false = no valid StringOrUri.
@@ -964,4 +1159,10 @@ function isStringOrUri(str: string): boolean {
  */
 function isTimestamp(timestamp: number): boolean {
   return timestamp >= 0 && Number.isFinite(timestamp);
+}
+
+export class MissingClaimError extends Error {
+  constructor(claimDescription: string, claimName: string) {
+    super(`${claimDescription} claim "${claimName}" is missing!`);
+  }
 }
