@@ -5,6 +5,7 @@ import { IctRequestTokenHeader } from './ict-request-token-header.interface';
 import { IctRequestTokenPayload } from './ict-request-token-payload.interface';
 import { IrtClaimSpecification } from './irt-claim-specification.interface';
 import { IrtClaimsSpecification } from './irt-claims-specification.interface';
+import { JwtVerificationOptions } from './jwt-verification-options.interface';
 import { NonceGenerators } from '../nonce-generators';
 import { JwsSignatureAlgorithm } from '../types';
 
@@ -13,14 +14,57 @@ export class IctRequestToken {
   /**
    * Gets an ICT Request Token from an ICT Request Token string.
    * @param tokenString ICT Request Token string.
+   * @param options Options how to verify or boolean whether to verify the token. Default: true.
    * @returns Parsed ICT Request Token.
    */
-  static async fromTokenString(tokenString: string): Promise<IctRequestToken> {
+  static async fromTokenString(tokenString: string, options: Partial<JwtVerificationOptions> | boolean = true): Promise<IctRequestToken> {
     const [ header, payload, signature ] = tokenString.split('.');
 
-    return (await new IctRequestToken().setHeader(header))
-      .setPayloadString(payload)
-      .setSignatureString(signature);
+    const verificationOptions = getJwtVerificationOptions(options);
+
+    const irt = await new IctRequestToken().setHeader(header);
+
+    // Verify signature.
+    if (verificationOptions.verifySignature) {
+      const headerAndPayloadString = `${header}.${payload}`;
+      const asciiData = stringToAsciiBytes(headerAndPayloadString);
+      const signatureData = decodeBase64url(signature);
+      const publicKey = irt.getPublicKey();
+      if (publicKey === undefined) {
+        throw new Error('No public key provided!');
+      }
+      const signatureValid = await crypto.webcrypto.subtle.verify(irt.getAlgorithm(), publicKey, signatureData, asciiData);
+
+      if (signatureValid === false) {
+        throw new Error('Invalid signature!');
+      }
+    }
+
+    irt.setPayloadString(payload);
+
+    // Verify time.
+    if (verificationOptions.verifyTime) {
+      const now = verificationOptions.verificationTime as number;
+      const exp = irt.getExpirationTime();
+      if (exp === undefined) {
+        throw new Error('No expiration time provided!');
+      } else if (now + verificationOptions.verificationTimeDelta > exp) {
+        throw new Error(`Token expired! Was valid until ${new Date(exp * 1000).toISOString()}, verification time is ${new Date(now)}, delta is ${verificationOptions.verificationTimeDelta} seconds`);
+      }
+      const nbf = irt.getNotBefore();
+      if (nbf === undefined) {
+        const iat = irt.getIssuedAt();
+        if (iat === undefined) {
+          throw new Error('Neither not before, nor issued at provided!');
+        } else if (now - verificationOptions.verificationTimeDelta < iat) {
+          throw new Error(`Token not yet valid! Becomes valid at issued at time ${new Date(iat * 1000).toISOString()}, verification time is ${new Date(now)}, delta is ${verificationOptions.verificationTimeDelta} seconds`);
+        }
+      } else if (now - verificationOptions.verificationTimeDelta < nbf) {
+        throw new Error(`Token not yet valid! Becomes valid at not before time ${new Date(nbf * 1000).toISOString()}, verification time is ${new Date(now)}, delta is ${verificationOptions.verificationTimeDelta} seconds`);
+      }
+    }
+
+    return irt.setSignatureString(signature);
   }
 
   /**
@@ -143,6 +187,59 @@ export class IctRequestToken {
       return await crypto.subtle.exportKey(format, this.publicKey) as KeyExportType<T>;
     } else {
       return await crypto.subtle.exportKey(format, this.publicKey) as KeyExportType<T>;
+    }
+  }
+
+  getAlgorithm(): JwsSignatureAlgorithm {
+    if (this.publicKey === undefined) {
+      throw new Error('Public key not set!');
+    }
+
+    switch (this.publicKey.algorithm.name) {
+    // Elliptic Curve: (ES256 / ES384 / ES512)
+    case 'ECDSA': {
+      const esAlgorithm = this.publicKey.algorithm as crypto.webcrypto.EcKeyAlgorithm;
+      switch (esAlgorithm.namedCurve) {
+      case 'P-256':
+        return 'ES256';
+      case 'P-384':
+        return 'ES384';
+      case 'P-521':
+        return 'ES512';
+      default:
+        throw new Error(`Unsupported curve name ${esAlgorithm.namedCurve}`);
+      }
+    }
+    // RSA Probablistic Signing Scheme: (PS256 / PS384 / PS512)
+    case 'RSA-PSS': {
+      const psAlgorithm = this.publicKey.algorithm as crypto.webcrypto.RsaHashedKeyAlgorithm;
+      switch (psAlgorithm.hash.name) {
+      case 'SHA-256':
+        return 'RS256';
+      case 'SHA-384':
+        return 'RS384';
+      case 'SHA-512':
+        return 'RS512';
+      default:
+        throw new Error(`Unsupported hash algorithm name ${psAlgorithm.hash}`);
+      }
+    }
+    // RSA Public Key Cryptography Standard: (RS256 / RS384 / RS512)
+    case 'RSASSA-PKCS1-v1_5': {
+      const rsAlgorithm = this.publicKey.algorithm as crypto.webcrypto.RsaHashedKeyAlgorithm;
+      switch (rsAlgorithm.hash.name) {
+      case 'SHA-256':
+        return 'RS256';
+      case 'SHA-384':
+        return 'RS384';
+      case 'SHA-512':
+        return 'RS512';
+      default:
+        throw new Error(`Unsupported hash algorithm name ${rsAlgorithm.hash}`);
+      }
+    }
+    default:
+      throw new Error(`Unsupported algorithm name ${this.publicKey.algorithm.name}`);
     }
   }
 
@@ -700,7 +797,7 @@ export class IctRequestToken {
 
     return {
       typ: 'JWT+IRT',
-      alg: getSufficientSignatureAlgorithmName(publicKey),
+      alg: this.getAlgorithm(),
       jwk: key,
     };
   }
@@ -781,13 +878,7 @@ export class IctRequestToken {
     // Generate header and payload string.
     const headerAndPayloadString = await this.getHeaderAndPayloadString();
 
-    // Convert string to ASCII encoded bytes.
-    const asciiBytes = [];
-    for (let i = 0; i < headerAndPayloadString.length; i++) {
-      asciiBytes[i] = headerAndPayloadString.charCodeAt(i);
-    }
-
-    return new Uint8Array(asciiBytes);
+    return stringToAsciiBytes(headerAndPayloadString);
   }
 
   /**
@@ -962,60 +1053,6 @@ function base64UrlToObject(base64url: string): object {
  * @param key An asymmetric key.
  * @returns A sufficient signing algorithm.
  */
-function getSufficientSignatureAlgorithmName(key: crypto.webcrypto.CryptoKey): JwsSignatureAlgorithm {
-  switch (key.algorithm.name) {
-  // Elliptic Curve: (ES256 / ES384 / ES512)
-  case 'ECDSA': {
-    const esAlgorithm = key.algorithm as crypto.webcrypto.EcKeyAlgorithm;
-    switch (esAlgorithm.namedCurve) {
-    case 'P-256':
-      return 'ES256';
-    case 'P-384':
-      return 'ES384';
-    case 'P-521':
-      return 'ES512';
-    default:
-      throw new Error(`Unsupported curve name ${esAlgorithm.namedCurve}`);
-    }
-  }
-  // RSA Probablistic Signing Scheme: (PS256 / PS384 / PS512)
-  case 'RSA-PSS': {
-    const psAlgorithm = key.algorithm as crypto.webcrypto.RsaHashedKeyAlgorithm;
-    switch (psAlgorithm.hash.name) {
-    case 'SHA-256':
-      return 'RS256';
-    case 'SHA-384':
-      return 'RS384';
-    case 'SHA-512':
-      return 'RS512';
-    default:
-      throw new Error(`Unsupported hash algorithm name ${psAlgorithm.hash}`);
-    }
-  }
-  // RSA Public Key Cryptography Standard: (RS256 / RS384 / RS512)
-  case 'RSASSA-PKCS1-v1_5': {
-    const rsAlgorithm = key.algorithm as crypto.webcrypto.RsaHashedKeyAlgorithm;
-    switch (rsAlgorithm.hash.name) {
-    case 'SHA-256':
-      return 'RS256';
-    case 'SHA-384':
-      return 'RS384';
-    case 'SHA-512':
-      return 'RS512';
-    default:
-      throw new Error(`Unsupported hash algorithm name ${rsAlgorithm.hash}`);
-    }
-  }
-  default:
-    throw new Error(`Unsupported algorithm name ${key.algorithm.name}`);
-  }
-}
-
-/**
- * Gets a sufficient signing algorithm for a provided asymmetric key.
- * @param key An asymmetric key.
- * @returns A sufficient signing algorithm.
- */
 function getSufficientSignatureAlgorithm(key: crypto.webcrypto.CryptoKey): AlgorithmIdentifier | RsaPssParams | EcdsaParams {
   switch (key.algorithm.name) {
   // Elliptic Curve: (ES256 / ES384 / ES512)
@@ -1161,8 +1198,45 @@ function isTimestamp(timestamp: number): boolean {
   return timestamp >= 0 && Number.isFinite(timestamp);
 }
 
+function stringToAsciiBytes(str: string): Uint8Array {
+  // Convert string to ASCII encoded bytes.
+  const asciiBytes = [];
+  for (let i = 0; i < str.length; i++) {
+    asciiBytes[i] = str.charCodeAt(i);
+  }
+
+  return new Uint8Array(asciiBytes);
+}
+
 export class MissingClaimError extends Error {
   constructor(claimDescription: string, claimName: string) {
     super(`${claimDescription} claim "${claimName}" is missing!`);
+  }
+}
+
+function getJwtVerificationOptions(options: Partial<JwtVerificationOptions> | boolean = true): JwtVerificationOptions {
+  if (typeof options === 'boolean') {
+    if (options === true) {
+      return {
+        verifySignature: true,
+        verifyTime: true,
+        verificationTime: Date.now(),
+        verificationTimeDelta: 0,
+      };
+    } else {
+      return {
+        verifySignature: false,
+        verifyTime: false,
+        verificationTime: Date.now(),
+        verificationTimeDelta: 0,
+      };
+    }
+  } else {
+    return {
+      verifySignature: options.verifySignature ?? true,
+      verifyTime: options.verifyTime ?? true,
+      verificationTime: options.verificationTime === undefined ? Date.now() : typeof options.verificationTime === 'number' ? options.verificationTime : options.verificationTime.getTime() / 1000,
+      verificationTimeDelta: options.verificationTimeDelta === undefined || options.verificationTimeDelta < 0 || !Number.isFinite(options.verificationTimeDelta) ? 0 : options.verificationTimeDelta,
+    };
   }
 }
