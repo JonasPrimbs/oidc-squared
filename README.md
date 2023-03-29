@@ -59,3 +59,22 @@ const token = new IctRequestToken()             // Create new IRT.
 await token.sign(privateKey);                   // Sign the IRT. (required)
 const irt = await token.getTokenString();       // Convert the token to JWT string.
 ```
+
+#### Validation Example
+
+```typescript
+import { IctRequestToken } from 'oidc-squared';
+
+const irt = 'eyJ0eX[...]19.eyJ[...]fQ.HKzM[...]azA';              // ID Certification Token (shortened).
+
+const token = await IctRequestToken.fromTokenString(irt);         // Create new IRT and verify validity.
+// or
+const token = await IctRequestToken.fromTokenString(irt, false);  // Create new IRT and do not verify validity.
+// or
+const token = await IctRequestToken.fromTokenString(irt, {        // Create new IRT and verify only signature.
+  verifySignature: true,                                          // Verify signature.
+  verifyTime: false,                                              // Do not verify time.
+  verificationTime: Date.now() / 1000,                            // Set timestamp (with millisecond precision) of verification time.
+  verificationTimeDelta: 60,                                      // Optional time delta to avoid time shifting errors.
+});        
+```
