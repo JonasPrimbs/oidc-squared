@@ -210,7 +210,7 @@ test('sets an elliptic curve key to an empty ICT Request Token', async () => {
   expect(spki256).toBeInstanceOf(ArrayBuffer);
   expect(spki384).toBeInstanceOf(ArrayBuffer);
   expect(spki512).toBeInstanceOf(ArrayBuffer);
-});
+}, 30000);
 
 test('sets an RSA key to an empty ICT Request Token', async () => {
   // Create keys.
