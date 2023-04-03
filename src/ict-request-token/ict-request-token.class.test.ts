@@ -565,7 +565,7 @@ test('sets issued at to an empty ICT Request Token', () => {
   expect(new IctRequestToken().setIssuedAt(1679612400).getIssuedAt()).toBe(1679612400);
   expect(new IctRequestToken().setIssuedAt(new Date(Date.UTC(2023, 3, 24, 0, 0, 0))).getIssuedAt()).toBe(1682294400);
 
-  expect(new IctRequestToken().setIssuedAt(1679612400).getIssuedAtDate()).toEqual(new Date('2023-03-24 00:00:00'));
+  expect(new IctRequestToken().setIssuedAt(1682294400).getIssuedAtDate()).toEqual(new Date(Date.UTC(2023, 3, 24, 0, 0, 0)));
   expect(new IctRequestToken().setIssuedAt(new Date('2023-03-24 00:00:00')).getIssuedAtDate()).toEqual(new Date('2023-03-24 00:00:00'));
 });
 
@@ -604,8 +604,8 @@ test('sets not before to an empty ICT Request Token', () => {
   expect(new IctRequestToken().setNotBefore(1679612400).getNotBefore()).toBe(1679612400);
   expect(new IctRequestToken().setNotBefore(new Date(Date.UTC(2023, 3, 24, 0, 0, 0))).getNotBefore()).toBe(1682294400);
 
-  expect(new IctRequestToken().setIssuedAt(1679612400).setNotBefore().getNotBeforeDate()).toEqual(new Date('2023-03-24 00:00:00'));
-  expect(new IctRequestToken().setNotBefore(1679612400).getNotBeforeDate()).toEqual(new Date('2023-03-24 00:00:00'));
+  expect(new IctRequestToken().setIssuedAt(1682294400).setNotBefore().getNotBeforeDate()).toEqual(new Date(Date.UTC(2023, 3, 24, 0, 0, 0)));
+  expect(new IctRequestToken().setNotBefore(1682294400).getNotBeforeDate()).toEqual(new Date(Date.UTC(2023, 3, 24, 0, 0, 0)));
   expect(new IctRequestToken().setNotBefore(new Date('2023-03-24 00:00:00')).getNotBeforeDate()).toEqual(new Date('2023-03-24 00:00:00'));
 });
 
@@ -638,7 +638,7 @@ test('sets issued at to an empty ICT Request Token', () => {
   expect(new IctRequestToken().setExpirationTime(1679612400).getExpirationTime()).toBe(1679612400);
   expect(new IctRequestToken().setExpirationTime(new Date(Date.UTC(2023, 3, 24, 0, 0, 0))).getExpirationTime()).toBe(1682294400);
 
-  expect(new IctRequestToken().setExpirationTime(1679612400).getExpirationTimeDate()).toEqual(new Date('2023-03-24 00:00:00'));
+  expect(new IctRequestToken().setExpirationTime(1682294400).getExpirationTimeDate()).toEqual(new Date(Date.UTC(2023, 3, 24, 0, 0, 0)));
   expect(new IctRequestToken().setExpirationTime(new Date('2023-03-24 00:00:00')).getExpirationTimeDate()).toEqual(new Date('2023-03-24 00:00:00'));
 });
 
