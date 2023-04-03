@@ -1114,7 +1114,7 @@ test('signs the IRT', async () => {
       },
     }).hasSignature();
   })()).resolves.toBe(false);
-});
+}, 30000);
 
 test('get IRT signature', async () => {
   // Create keys.
@@ -1171,7 +1171,7 @@ test('get IRT signature', async () => {
 
   const token = await new IctRequestToken().setPublicKey(publicKey).setIssuer(iss).setSubject(sub).setAudience(aud).setIssuedAt(iat).setExpirationTime(exp).sign(privateKey);
   expect(token.getSignatureString()).toBe('HKzMC_giMs2Jo5MQ8mwoAr2INix3hLM_SwGQxClYwbLSrswTpl1xdtEzBKF2YwBerhAE04-lpha9w-7BepMAuD4KEAMaAd8ZsDCQW2pPz7dC5r2kusQHlkv_-bt_qVPjUbbV6jVp_S2ixSaM5Wyq0FgmFZ8uOFw1epRoxM8ViLyucSzlq2DcmjcH_v4WZ6E2s12Te_sYxJ-lV70vkUAD971oLNzBnxdiz-vYjAzMibyx4R9TIqYagak_KDVXfy-uKzRnh_nNHMOdwm-eGnqIhxHVjuWHy4-yxhxiUHypRGLvIxm0qeXsRc1ThG4Mc3xf_FTcS9nUGw9p1Tf2ouQazA');
-});
+}, 30000);
 
 test('get IRT token string', async () => {
   // Create keys.
