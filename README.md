@@ -11,6 +11,10 @@ npm install oidc-squared
 
 ## Documentation
 
+The following shows a quick introduction to the OIDC² library.
+A more-detailed documentation is provided [here](https://jonasprimbs.github.io/oidc-squared/).
+
+
 ### ICT Request Token
 
 #### Supported Signing Algorithms
