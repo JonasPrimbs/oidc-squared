@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: ict-request-token/ict-request-token.class.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: ict-request-token/ict-request-token.class.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>var __createBinding = (this &amp;&amp; this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this &amp;&amp; this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this &amp;&amp; this.__importStar) || function (mod) {
+    if (mod &amp;&amp; mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" &amp;&amp; Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+(function (factory) {
+    if (typeof module === "object" &amp;&amp; typeof module.exports === "object") {
+        var v = factory(require, exports);
+        if (v !== undefined) module.exports = v;
+    }
+    else if (typeof define === "function" &amp;&amp; define.amd) {
+        define(["require", "exports", "crypto", "@jonasprimbs/byte-array-converter", "../nonce-generators"], factory);
+    }
+})(function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.MissingClaimError = exports.IctRequestToken = void 0;
+    const crypto = __importStar(require("crypto"));
+    const byte_array_converter_1 = require("@jonasprimbs/byte-array-converter");
+    const nonce_generators_1 = require("../nonce-generators");
+    class IctRequestToken {
+        /**
+         * Gets an ICT Request Token from an ICT Request Token string.
+         * @param tokenString ICT Request Token string.
+         * @param options Options how to verify or boolean whether to verify the token. Default: true.
+         * @returns Parsed ICT Request Token.
+         */
+        static async fromTokenString(tokenString, options = true) {
+            const [header, payload, signature] = tokenString.split('.');
+            const verificationOptions = getJwtVerificationOptions(options);
+            const irt = await new IctRequestToken().setHeader(header);
+            // Verify signature.
+            if (verificationOptions.verifySignature) {
+                const headerAndPayloadString = `${header}.${payload}`;
+                const asciiData = stringToAsciiBytes(headerAndPayloadString);
+                const signatureData = (0, byte_array_converter_1.decodeBase64url)(signature);
+                const publicKey = irt.getPublicKey();
+                if (publicKey === undefined) {
+                    throw new Error('No public key provided!');
+                }
+                const signatureValid = await crypto.webcrypto.subtle.verify(irt.getAlgorithm(), publicKey, signatureData, asciiData);
+                if (signatureValid === false) {
+                    throw new Error('Invalid signature!');
+                }
+            }
+            irt.setPayloadString(payload);
+            // Verify time.
+            if (verificationOptions.verifyTime) {
+                const now = verificationOptions.verificationTime;
+                const exp = irt.getExpirationTime();
+                if (exp === undefined) {
+                    throw new Error('No expiration time provided!');
+                }
+                else if (now + verificationOptions.verificationTimeDelta > exp) {
+                    throw new Error(`Token expired! Was valid until ${new Date(exp * 1000).toISOString()}, verification time is ${new Date(now)}, delta is ${verificationOptions.verificationTimeDelta} seconds`);
+                }
+                const nbf = irt.getNotBefore();
+                if (nbf === undefined) {
+                    const iat = irt.getIssuedAt();
+                    if (iat === undefined) {
+                        throw new Error('Neither not before, nor issued at provided!');
+                    }
+                    else if (now - verificationOptions.verificationTimeDelta &lt; iat) {
+                        throw new Error(`Token not yet valid! Becomes valid at issued at time ${new Date(iat * 1000).toISOString()}, verification time is ${new Date(now)}, delta is ${verificationOptions.verificationTimeDelta} seconds`);
+                    }
+                }
+                else if (now - verificationOptions.verificationTimeDelta &lt; nbf) {
+                    throw new Error(`Token not yet valid! Becomes valid at not before time ${new Date(nbf * 1000).toISOString()}, verification time is ${new Date(now)}, delta is ${verificationOptions.verificationTimeDelta} seconds`);
+                }
+            }
+            return irt.setSignatureString(signature);
+        }
+        /**
+         * The public key to prove possession of.
+         */
+        publicKey;
+        /**
+         * The signature.
+         */
+        signature;
+        /**
+         * The claims of the payload.
+         */
+        claims = {};
+        /**
+         * Sets the header.
+         * @param headerString Base64URL encoded JWT header.
+         * @returns ICT Request Token with header.
+         */
+        async setHeader(headerString) {
+            const headerObj = base64UrlToObject(headerString);
+            if (headerObj.typ === undefined) {
+                throw new Error('No token type provided!');
+            }
+            else if (headerObj.typ !== 'JWT+IRT') {
+                throw new Error(`Invalid token type "${headerObj.typ}"! Expected token type "JWT+IRT" for ICT Request Token!`);
+            }
+            if (headerObj.alg === undefined) {
+                throw new Error('No signature algorithm provided!');
+            }
+            if (headerObj.jwk === undefined) {
+                throw new Error('No public key provided!');
+            }
+            const publicKey = await crypto.webcrypto.subtle.importKey('jwk', headerObj.jwk, getSignatureAlgorithmImportParameterFromName(headerObj.alg), true, ['verify']);
+            this.setPublicKey(publicKey);
+            return this;
+        }
+        /**
+         * Sets the public key for the ICT Request Token.
+         * @param publicKey Public key of the ICT Request Token.
+         * @returns The updated ICT Request Token instance.
+         */
+        setPublicKey(publicKey) {
+            // Verify that provided key is a public key.
+            if (publicKey.type !== 'public') {
+                throw new Error('Provided public key is not of type "public"!');
+            }
+            // Verify that provided key is meant for signing.
+            if (publicKey.usages.indexOf('verify') === -1) {
+                throw new Error('Provided public key has no usage "verify"!');
+            }
+            // Verify that provided key is extractable.
+            if (!publicKey.extractable) {
+                throw new Error('Provided public key is not extactable!');
+            }
+            // Verify that provided key has a sufficient algorithm name.
+            switch (publicKey.algorithm.name) {
+                case 'ECDSA':
+                    // ES256 / ES384 / ES512.
+                    break;
+                case 'RSA-PSS':
+                    // PS256 / PS384 / PS512.
+                    break;
+                case 'RSASSA-PKCS1-v1_5':
+                    // RS256 / RS384 / RS512.
+                    break;
+                default:
+                    throw new Error(`Provided public key has an unsupported signing algorithm "${publicKey.algorithm.name}"!`);
+            }
+            // Clear outdated signature.
+            this.signature = undefined;
+            // Set public key.
+            this.publicKey = publicKey;
+            return this;
+        }
+        /**
+         * Indicates whether a public key is provided.
+         * @returns true = has a public key; false = has no public key.
+         */
+        hasPublicKey() {
+            return this.publicKey instanceof crypto.webcrypto.CryptoKey;
+        }
+        /**
+         * Gets the set public key.
+         * @returns The public key.
+         */
+        getPublicKey() {
+            return this.publicKey;
+        }
+        /**
+         * Exports the public key.
+         * @param format Format of the exported public key.
+         * @returns The exported public key.
+         */
+        async exportPublicKey(format) {
+            if (this.publicKey === undefined) {
+                return undefined;
+            }
+            if (format === 'jwk') {
+                return await crypto.subtle.exportKey(format, this.publicKey);
+            }
+            else {
+                return await crypto.subtle.exportKey(format, this.publicKey);
+            }
+        }
+        getAlgorithm() {
+            if (this.publicKey === undefined) {
+                throw new Error('Public key not set!');
+            }
+            switch (this.publicKey.algorithm.name) {
+                // Elliptic Curve: (ES256 / ES384 / ES512)
+                case 'ECDSA': {
+                    const esAlgorithm = this.publicKey.algorithm;
+                    switch (esAlgorithm.namedCurve) {
+                        case 'P-256':
+                            return 'ES256';
+                        case 'P-384':
+                            return 'ES384';
+                        case 'P-521':
+                            return 'ES512';
+                        default:
+                            throw new Error(`Unsupported curve name ${esAlgorithm.namedCurve}`);
+                    }
+                }
+                // RSA Probablistic Signing Scheme: (PS256 / PS384 / PS512)
+                case 'RSA-PSS': {
+                    const psAlgorithm = this.publicKey.algorithm;
+                    switch (psAlgorithm.hash.name) {
+                        case 'SHA-256':
+                            return 'RS256';
+                        case 'SHA-384':
+                            return 'RS384';
+                        case 'SHA-512':
+                            return 'RS512';
+                        default:
+                            throw new Error(`Unsupported hash algorithm name ${psAlgorithm.hash}`);
+                    }
+                }
+                // RSA Public Key Cryptography Standard: (RS256 / RS384 / RS512)
+                case 'RSASSA-PKCS1-v1_5': {
+                    const rsAlgorithm = this.publicKey.algorithm;
+                    switch (rsAlgorithm.hash.name) {
+                        case 'SHA-256':
+                            return 'RS256';
+                        case 'SHA-384':
+                            return 'RS384';
+                        case 'SHA-512':
+                            return 'RS512';
+                        default:
+                            throw new Error(`Unsupported hash algorithm name ${rsAlgorithm.hash}`);
+                    }
+                }
+                default:
+                    throw new Error(`Unsupported algorithm name ${this.publicKey.algorithm.name}`);
+            }
+        }
+        /**
+         * Sets all claims.
+         * @param claims Claims to set.
+         */
+        setClaims(claims) {
+            if (claims.aud === undefined) {
+                throw new MissingClaimError('Audience', 'aud');
+            }
+            else {
+                this.setAudience(claims.aud);
+            }
+            if (claims.exp === undefined) {
+                throw new MissingClaimError('Expiration time', 'exp');
+            }
+            else {
+                this.setExpirationTime(claims.exp);
+            }
+            if (claims.iat === undefined) {
+                throw new MissingClaimError('Issued at', 'iat');
+            }
+            else {
+                this.setIssuedAt(claims.iat);
+            }
+            if (claims.iss === undefined) {
+                throw new MissingClaimError('Issuer', 'iss');
+            }
+            else {
+                this.setIssuer(claims.iss);
+            }
+            if (claims.sub === undefined) {
+                throw new MissingClaimError('Subject', 'sub');
+            }
+            else {
+                this.setSubject(claims.sub);
+            }
+            if (claims.jti !== undefined) {
+                this.setJti(claims.jti);
+            }
+            if (claims.nbf !== undefined) {
+                this.setNotBefore(claims.nbf);
+            }
+            if (claims.nonce !== undefined) {
+                this.setNonce(claims.nonce);
+            }
+            if (claims.token_claims !== undefined) {
+                this.setTokenClaims(claims.token_claims);
+            }
+        }
+        /**
+         * Sets the payload.
+         * @param payloadString Base64URL encoded JWT payload.
+         * @returns ICT Request Token with payload.
+         */
+        setPayloadString(payloadString) {
+            const payloadObj = base64UrlToObject(payloadString);
+            this.setClaims(payloadObj);
+            return this;
+        }
+        /**
+         * Sets the "sub" (Subject) claim.
+         * @param subject Subject of the ICT Request Token, e.g., the user's identifier ("sub" claim in the ID Token).
+         * @returns The updated ICT Request Token instance.
+         */
+        setSubject(subject) {
+            // Validate subject.
+            if (!isStringOrUri(subject)) {
+                throw new Error(`Invalid subject "${subject}"! Must be a valid URL since it contains a ':' character!`);
+            }
+            // Verify that subject is not empty.
+            if (subject === '') {
+                return this;
+            }
+            // Clear outdated signature.
+            this.signature = undefined;
+            // Set the subject ("sub") claim.
+            this.claims.sub = subject;
+            return this;
+        }
+        /**
+         * Indicates whether the subject is provided.
+         * @returns true = has subject; false = has no subject.
+         */
+        hasSubject() {
+            return !!this.claims.sub;
+        }
+        /**
+         * Gets the subject of the ICT Request Token.
+         * @returns The provided subject.
+         */
+        getSubject() {
+            return this.claims.sub;
+        }
+        /**
+         * Sets the "aud" (Audience) claim.
+         * @param audience Audience(s) of the ICT Request Token, e.g., the OpenID Provider's identifier ("iss" claim in the ID Token).
+         * @returns The updated ICT Request Token instance.
+         */
+        setAudience(audience) {
+            // Convert input audience to string array.
+            const audArray = typeof audience === 'string' ? [audience] : [...audience];
+            // Filter all insufficient audience values and duplicates from array.
+            const filteredAud = [...new Set(audArray.filter(a => a !== ''))];
+            // Do not change the audience if no sufficient audience is provided.
+            if (filteredAud.length === 0) {
+                return this;
+            }
+            // Verify validity of provided audiences.
+            const errorIndex = filteredAud.findIndex(a => !isStringOrUri(a));
+            // Throw error if any audience is invalid.
+            if (errorIndex >= 0) {
+                throw new Error(`Invalid audience "${audience[errorIndex]}"! Must be a valid URL since it contains a ':' character!`);
+            }
+            // Clear outdated signature.
+            this.signature = undefined;
+            // Set audience claim.
+            if (filteredAud.length === 1) {
+                this.claims.aud = filteredAud[0];
+            }
+            else {
+                this.claims.aud = filteredAud;
+            }
+            return this;
+        }
+        /**
+         * Indicates whether the audience is provided.
+         * @returns true = has an audience; false = has no audience.
+         */
+        hasAudience() {
+            if (!this.claims.aud) {
+                return false;
+            }
+            else if (this.claims.aud instanceof Array) {
+                return this.claims.aud.length > 0;
+            }
+            else {
+                return !!this.claims.aud;
+            }
+        }
+        /**
+         * Gets the audience of the ICT Request Token.
+         * @returns The provided audience.
+         */
+        getAudience() {
+            if (this.claims.aud === undefined) {
+                return undefined;
+            }
+            else if (typeof this.claims.aud === 'string') {
+                return [this.claims.aud];
+            }
+            else {
+                return [...this.claims.aud];
+            }
+        }
+        /**
+         * Gets whether the ICT Request Token contains a specific audience.
+         * @param audience Audience to search for.
+         * @returns true = contains audience; false = does not contain audience.
+         */
+        containsAudience(audience) {
+            const aud = this.getAudience();
+            if (aud === undefined) {
+                return false;
+            }
+            else {
+                return aud.indexOf(audience) >= 0;
+            }
+        }
+        /**
+         * Sets the "iss" (Issuer) claim.
+         * @param issuer Issuer of the ICT Request Token, e.g., the Client's identifier ("aud" claim in the ID Token).
+         * @returns The updated ICT Request Token instance.
+         */
+        setIssuer(issuer) {
+            // Validate issuer.
+            if (!isStringOrUri(issuer)) {
+                throw new Error(`Invalid issuer "${issuer}"! Must be a valid URL since it contains a ':' character!`);
+            }
+            // Verify that issuer is not empty.
+            if (issuer === '') {
+                return this;
+            }
+            // Clear outdated signature.
+            this.signature = undefined;
+            // Set the issuer ("iss") claim.
+            this.claims.iss = issuer;
+            return this;
+        }
+        /**
+         * Indicates whether the issuer is provided.
+         * @returns true = has an issuer; false = has no issuer.
+         */
+        hasIssuer() {
+            return !!this.claims.iss;
+        }
+        /**
+         * Gets the issuer of the ICT Request Token.
+         * @returns The provided issuer.
+         */
+        getIssuer() {
+            return this.claims.iss;
+        }
+        /**
+         * Sets the "jti" (JSON Web Token ID) claim.
+         * @param jwtId JSON Web Token ID of the ICT Request Token. Typically a registered random string. If not provided, a random UUID will be generated.
+         * @returns The updated ICT Request Token instance.
+         */
+        setJti(jwtId = nonce_generators_1.NonceGenerators.uuid().generate()) {
+            // Validate provided JWT Token ID.
+            if (jwtId === '') {
+                throw new Error('Invalid JWT Token ID (jti): Must be a unique string!');
+            }
+            // Clear outdated signature.
+            this.signature = undefined;
+            // Set the JWT ID ("jti") claim.
+            this.claims.jti = jwtId;
+            return this;
+        }
+        /**
+         * Indicates whether a JWT ID is provided.
+         * @returns true = has a JWT ID; false = has no JWT ID.
+         */
+        hasJti() {
+            return !!this.claims.jti;
+        }
+        /**
+         * Gets the JWT ID of the ICT Request Token.
+         * @returns The provided JWT ID.
+         */
+        getJti() {
+            return this.claims.jti;
+        }
+        /**
+         * Sets the "nonce" (Nonce) claim.
+         * @param nonce Nonce of the ICT Request Token. Typically a random string. If not provided, a random 15 bytes long base64 string will be generated.
+         * @returns The updated ICT Request Token instance.
+         */
+        setNonce(nonce = nonce_generators_1.NonceGenerators.base64(15).generate()) {
+            // Validate input value.
+            if (!nonce) {
+                throw new Error('Nonce value must not be an empty string!');
+            }
+            // Clear outdated signature.
+            this.signature = undefined;
+            // Set the Nonce ("nonce") claim.
+            this.claims.nonce = nonce;
+            return this;
+        }
+        /**
+         * Indicates whether the nonce is provided.
+         * @returns true = has a nonce; false = has no nonce.
+         */
+        hasNonce() {
+            return !!this.claims.nonce;
+        }
+        /**
+         * Gets the nonce of the ICT Request Token.
+         * @returns The provided nonce.
+         */
+        getNonce() {
+            return this.claims.nonce;
+        }
+        /**
+         * Sets the "iat" (Issued at) claim.
+         * @param issuedAt Issued at time as Date or as numbered unix timestamp with seconds precision. Default is current timestamp.
+         * @returns The updated ICT Request Token instance.
+         */
+        setIssuedAt(issuedAt) {
+            if (issuedAt instanceof Date) {
+                // Set UTC unix timestamp to issued at time.
+                this.claims.iat = issuedAt.getTime() / 1000;
+            }
+            else if (typeof issuedAt === 'number') {
+                // Validate timestamp.
+                if (!isTimestamp(issuedAt)) {
+                    throw new Error(`Invalid timestamp ${issuedAt}!`);
+                }
+                // Set provided UTC unix timestamp to issued at time.
+                this.claims.iat = issuedAt;
+            }
+            else {
+                // Set current UTX unix timestamp to issued at time.
+                this.claims.iat = Math.floor(Date.now() / 1000);
+            }
+            // Clear outdated signature.
+            this.signature = undefined;
+            return this;
+        }
+        /**
+         * Indicates whether the issued at time is provided.
+         * @returns true = has an issued at time; false = has no issued at time.
+         */
+        hasIssuedAt() {
+            return !!this.claims.iat;
+        }
+        /**
+         * Gets the issued at time of the ICT Request Token as unix timestamp with seconds precision.
+         * @returns The provided issued at time as unix timestamp with seconds precision.
+         */
+        getIssuedAt() {
+            return this.claims.iat;
+        }
+        /**
+         * Gets the issued at time of the ICT Request Token as a date object.
+         * @returns The provided issued at time as date object.
+         */
+        getIssuedAtDate() {
+            if (!this.claims.iat) {
+                return undefined;
+            }
+            else {
+                return new Date(this.claims.iat * 1000);
+            }
+        }
+        /**
+         * Sets the "nbf" (Not before) claim.
+         * @param notBefore Not before time as Date or as numbered unix timestamp with second precision. Default is issued at time if defined, otherwise current timestamp.
+         * @returns The updated ICT Request Token instance.
+         */
+        setNotBefore(notBefore) {
+            if (notBefore instanceof Date) {
+                // Set UTC unix timestamp to not before time.
+                this.claims.nbf = notBefore.getTime() / 1000;
+            }
+            else if (typeof notBefore === 'number') {
+                // Validate timestamp.
+                if (!isTimestamp(notBefore)) {
+                    throw new Error(`Invalid timestamp ${notBefore}!`);
+                }
+                // Set provided UTC unix timestamp to not before time.
+                this.claims.nbf = notBefore;
+            }
+            else {
+                // Set issued at date if defined, otherwise current unix timestamp with seconds precision.
+                this.claims.nbf = this.getIssuedAt() ?? Math.round(Date.now() / 1000);
+            }
+            // Clear outdated signature.
+            this.signature = undefined;
+            return this;
+        }
+        /**
+         * Indicates whether the not before time is provided.
+         * @returns true = has a not before time; false = has no not before time.
+         */
+        hasNotBefore() {
+            return !!this.claims.nbf;
+        }
+        /**
+         * Gets the not before time of the ICT Request Token as unix timestamp with seconds precision.
+         * @returns The provided not before time as unix timestamp with seconds precision.
+         */
+        getNotBefore() {
+            return this.claims.nbf;
+        }
+        /**
+         * Gets the not before time of the ICT Request Token as a date object.
+         * @returns The provided not before time as date object.
+         */
+        getNotBeforeDate() {
+            if (!this.claims.nbf) {
+                return undefined;
+            }
+            else {
+                return new Date(this.claims.nbf * 1000);
+            }
+        }
+        /**
+         * Sets the "exp" (Expiration time) claim.
+         * @param expirationTime Expiration time as Date or as numbered unix timestamp with second precision.
+         * @returns The updated ICT Request Token instance.
+         */
+        setExpirationTime(expirationTime) {
+            if (expirationTime instanceof Date) {
+                // Set UTC unix timestamp to expiration time.
+                this.claims.exp = expirationTime.getTime() / 1000;
+            }
+            else {
+                // Validate timestamp.
+                if (!isTimestamp(expirationTime)) {
+                    throw new Error(`Invalid timestamp ${expirationTime}!`);
+                }
+                // Set provided UTC unix timestamp to expiration time.
+                this.claims.exp = expirationTime;
+            }
+            // Clear outdated signature.
+            this.signature = undefined;
+            return this;
+        }
+        /**
+         * Indicates whether the expiration time is provided.
+         * @returns true = has an expiration time; false = has no expiration time.
+         */
+        hasExpirationTime() {
+            return !!this.claims.exp;
+        }
+        /**
+         * Gets the expiration time of the ICT Request Token as unix timestamp with seconds precision.
+         * @returns The provided expiration time as unix timestamp with seconds precision.
+         */
+        getExpirationTime() {
+            return this.claims.exp;
+        }
+        /**
+         * Gets the expiration time of the ICT Request Token as a date object.
+         * @returns The provided expiration time as date object.
+         */
+        getExpirationTimeDate() {
+            if (!this.claims.exp) {
+                return undefined;
+            }
+            else {
+                return new Date(this.claims.exp * 1000);
+            }
+        }
+        /**
+         * Sets the "token_claims" (desired identity claims for the ID Certification Token) claim.
+         * @param claims Enumeration of desired identity claims for the requested ID Certification Token. Duplicates and empty strings will be omitted. If no claim is provided, the call will be ignored.
+         * @returns The updated ICT Request Token instance.
+         */
+        setTokenClaims(claims) {
+            // Verify that length is not empty.
+            if (Object.keys(claims).length === 0) {
+                return this;
+            }
+            // Create new instance of the claims specification.
+            const claimsSpecification = {};
+            // Validate claims.
+            for (const claimName in claims) {
+                // Get claim value.
+                const claimValue = claims[claimName];
+                // Copy claim value if null.
+                if (claimValue === null) {
+                    claimsSpecification[claimName] = null;
+                    continue;
+                }
+                // Create a new ID Certification Request Token claim specification.
+                const claimSpecification = {
+                    essential: claimValue.essential === true,
+                };
+                // Validate desired values.
+                if (claimValue.values !== undefined) {
+                    // Verify that value and values is not defined both.
+                    if (claimValue.value !== undefined) {
+                        throw new Error('Either "value", "values", or both must not be defined!');
+                    }
+                    // Filter all irrelevant values.
+                    const filteredValues = [...new Set(claimValue.values.filter(v => v !== '' &amp;&amp; v !== undefined))];
+                    if (filteredValues.length === 1) {
+                        // Make 'values' array with one value to the 'value' attribute. 
+                        claimSpecification.value = JSON.parse(JSON.stringify(filteredValues[0]));
+                    }
+                    else if (filteredValues.length > 0) {
+                        // Copy remaining values into new values array.
+                        claimSpecification.values = [];
+                        for (const value of filteredValues) {
+                            claimSpecification.values.push(JSON.parse(JSON.stringify(value)));
+                        }
+                    }
+                }
+                else if (claimValue.value !== undefined) {
+                    // Copy 'value' attribute if sufficient.
+                    claimSpecification.value = JSON.parse(JSON.stringify(claimValue.value));
+                }
+                // Make created claim specification the new specification of the current claim.
+                claimsSpecification[claimName] = claimSpecification;
+            }
+            // Clear outdated signature.
+            this.signature = undefined;
+            // Set the token claims ("token_claims") value.
+            this.claims.token_claims = claimsSpecification;
+            return this;
+        }
+        /**
+         * Indicates whether the token claims are provided.
+         * @returns true = has token claims; false = has no token claims.
+         */
+        hasTokenClaims() {
+            return !!this.claims.token_claims;
+        }
+        /**
+         * Gets the token claims of the ICT Request Token.
+         * @returns The provided token claims.
+         */
+        getTokenClaims() {
+            if (this.claims.token_claims === undefined) {
+                return undefined;
+            }
+            // Return a deep copy of the set token claims.
+            return JSON.parse(JSON.stringify(this.claims.token_claims));
+        }
+        /**
+         * Gets the ICT Request Token header as object.
+         * @returns The ICT Request Token header as object.
+         */
+        async getHeaderObject() {
+            const publicKey = this.publicKey;
+            if (!publicKey) {
+                throw new Error('Public key missing!');
+            }
+            const key = await crypto.subtle.exportKey('jwk', publicKey);
+            delete key.key_ops;
+            delete key.ext;
+            delete key.alg;
+            return {
+                typ: 'JWT+IRT',
+                alg: this.getAlgorithm(),
+                jwk: key,
+            };
+        }
+        /**
+         * Gets the ICT Request Token header as JSON-serialized and Base64URL encoded string.
+         * @returns The ICT Request Token header as JSON-serialized and Base64URL encoded string.
+         */
+        async getHeaderString() {
+            const obj = await this.getHeaderObject();
+            return objectToBase64Url(obj);
+        }
+        /**
+         * Gets the ICT Request Token payload as object.
+         * @returns The ICT Request Token payload as object.
+         */
+        getPayloadObject() {
+            // Verify that issuer is set.
+            if (!this.claims.iss) {
+                throw new Error('No issuer set!');
+            }
+            // Verify that subject is set.
+            if (!this.claims.sub) {
+                throw new Error('No subject set!');
+            }
+            // Verify that audience is set.
+            if (!this.claims.aud) {
+                throw new Error('No audience set!');
+            }
+            // Verify that date is set.
+            if (!this.claims.iat) {
+                throw new Error('No issued at date set!');
+            }
+            // Verify that expiration date is set.
+            if (!this.claims.exp) {
+                throw new Error('No expiration date set!');
+            }
+            // Return payload.
+            return {
+                iss: this.claims.iss,
+                sub: this.claims.sub,
+                aud: this.claims.aud,
+                iat: this.claims.iat,
+                nbf: this.claims.nbf,
+                exp: this.claims.exp,
+                jti: this.claims.jti,
+                nonce: this.claims.nonce,
+                token_claims: this.claims.token_claims,
+            };
+        }
+        /**
+         * Gets the ICT Request Token payload as JSON-serialized and Base64URL encoded string.
+         * @returns The ICT Request Token payload as JSON-serialized and Base64URL encoded string.
+         */
+        getPayloadString() {
+            const obj = this.getPayloadObject();
+            return objectToBase64Url(obj);
+        }
+        /**
+         * Gets the ICT Request Token header and payload, dot-separated as JSON-serialized and Base64URL encoded string.
+         * @returns The ICT Request Token header and payload, dot-separated as JSON-serialized and Base64URL encoded string.
+         */
+        async getHeaderAndPayloadString() {
+            const header = await this.getHeaderString();
+            const payload = this.getPayloadString();
+            return `${header}.${payload}`;
+        }
+        /**
+         * Gets the ICT Request Token header and payload to be used as input for signing.
+         * @returns The ICT Request Token header and payload to be used as input for signing.
+         */
+        async getHeaderAndPayloadBytes() {
+            // Generate header and payload string.
+            const headerAndPayloadString = await this.getHeaderAndPayloadString();
+            return stringToAsciiBytes(headerAndPayloadString);
+        }
+        /**
+         * Signs an ICT Request Token.
+         * @param privateKey The private key to sign the ICT Request Token with.
+         * @returns Signed ICT Request Token.
+         */
+        async sign(privateKey) {
+            // Verify that provided key is a public key.
+            if (privateKey.type !== 'private') {
+                throw new Error('Provided private key is not of type "private"!');
+            }
+            // Verify that provided key is meant for signing.
+            if (privateKey.usages.indexOf('sign') === -1) {
+                throw new Error('Provided private key has no usage "sign"!');
+            }
+            // Verify that the public key is provided.
+            if (!this.publicKey) {
+                throw new Error('No public key provided!');
+            }
+            // Verify that provided key has a sufficient algorithm name.
+            if (privateKey.algorithm.name !== this.publicKey.algorithm.name) {
+                throw new Error(`Provided private key signing algorithm "${privateKey.algorithm.name}" does not match the set public key signing algorithm "${this.publicKey.algorithm.name}"!`);
+            }
+            switch (privateKey.algorithm.name) {
+                case 'ECDSA': {
+                    const ecPrivateKey = privateKey.algorithm;
+                    const ecPublicKey = this.publicKey.algorithm;
+                    if (ecPrivateKey.namedCurve !== ecPublicKey.namedCurve) {
+                        throw new Error(`Private key's named curve "${ecPrivateKey.namedCurve}" does not match the provided public key's named curve "${ecPublicKey.namedCurve}"`);
+                    }
+                    break;
+                }
+                case 'RSA-PSS':
+                case 'RSASSA-PKCS1-v1_5': {
+                    const rsaPrivateKey = privateKey.algorithm;
+                    const rsaPublicKey = this.publicKey.algorithm;
+                    if (rsaPrivateKey.modulusLength !== rsaPublicKey.modulusLength) {
+                        throw new Error(`Private key's named curve "${rsaPrivateKey.modulusLength}" does not match the provided public key's named curve "${rsaPublicKey.modulusLength}"`);
+                    }
+                    break;
+                }
+                default:
+                    throw new Error('Invalid private key algorithm');
+            }
+            // Generate header and payload as ASCII encoded byte string.
+            const dataBuffer = await this.getHeaderAndPayloadBytes();
+            // Sign the ASCII encoded bytes.
+            const arrayBuffer = await crypto.webcrypto.subtle.sign(getSufficientSignatureAlgorithm(privateKey), privateKey, dataBuffer);
+            this.signature = new Uint8Array(arrayBuffer);
+            return this;
+        }
+        /**
+         * Sets the signature.
+         * @param signature Base64URL encoded JWT signature.
+         * @returns ICT Request Token with signature.
+         */
+        setSignatureString(signature) {
+            this.signature = (0, byte_array_converter_1.decodeBase64url)(signature);
+            return this;
+        }
+        /**
+         * Indicates whether the token has a signature.
+         * @returns true = has signature; false = has no signature.
+         */
+        hasSignature() {
+            return !!this.signature;
+        }
+        /**
+         * Gets the signature of header and payload.
+         * @returns Signature of header and payload as Uint8Array.
+         */
+        getSignatureBytes() {
+            if (!this.signature) {
+                throw new Error('Token not signed!');
+            }
+            return this.signature;
+        }
+        /**
+         * Gets the signature as Base64URL encoded string.
+         * @returns The signature as Base64URL encoded string.
+         */
+        getSignatureString() {
+            if (!this.signature) {
+                throw new Error('Token not signed!');
+            }
+            return (0, byte_array_converter_1.encodeBase64url)(this.signature);
+        }
+        /**
+         * Gets the ICT Request Token as JWT string.
+         * @returns The ICT Request Token as JWT string.
+         */
+        async getTokenString() {
+            if (!this.signature) {
+                throw new Error('Token not signed!');
+            }
+            // Generate header and payload string to sign.
+            const headerAndPayloadString = await this.getHeaderAndPayloadString();
+            // Generate signature string.
+            const signatureString = this.getSignatureString();
+            return `${headerAndPayloadString}.${signatureString}`;
+        }
+    }
+    exports.IctRequestToken = IctRequestToken;
+    /**
+     * Converts a string to an UTF8-encoded byte array.
+     * @param str String to convert.
+     * @returns The UTF8-encoded string.
+     */
+    function stringToUtf8Array(str) {
+        const encoder = new TextEncoder();
+        return encoder.encode(str);
+    }
+    /**
+     * Decodes an UTF8 encoded byte array to a string.
+     * @param data UTF8 encoded byte array.
+     * @returns Decoded UTF8 string.
+     */
+    function utf8ArrayToString(data) {
+        const decoder = new TextDecoder();
+        return decoder.decode(data);
+    }
+    /**
+     * Serializes an object with JSON and encodes the string Base64URL.
+     * @param obj Object to convert.
+     * @returns JSON-serialized and Base64URL encoded object as string.
+     */
+    function objectToBase64Url(obj) {
+        const json = JSON.stringify(obj);
+        const utf8 = stringToUtf8Array(json);
+        return (0, byte_array_converter_1.encodeBase64url)(utf8);
+    }
+    /**
+     * Decodes a Base64URL encoded string to a JSON object.
+     * @param base64url Base64URL encoded JSON object.
+     * @returns JSON Object.
+     */
+    function base64UrlToObject(base64url) {
+        const utf8 = (0, byte_array_converter_1.decodeBase64url)(base64url);
+        const json = utf8ArrayToString(utf8);
+        return JSON.parse(json);
+    }
+    /**
+     * Gets a sufficient signing algorithm for a provided asymmetric key.
+     * @param key An asymmetric key.
+     * @returns A sufficient signing algorithm.
+     */
+    function getSufficientSignatureAlgorithm(key) {
+        switch (key.algorithm.name) {
+            // Elliptic Curve: (ES256 / ES384 / ES512)
+            case 'ECDSA': {
+                const esAlgorithm = key.algorithm;
+                switch (esAlgorithm.namedCurve) {
+                    case 'P-256':
+                        return {
+                            name: 'ECDSA',
+                            hash: {
+                                name: 'SHA-256',
+                            },
+                        };
+                    case 'P-384':
+                        return {
+                            name: 'ECDSA',
+                            hash: {
+                                name: 'SHA-384',
+                            },
+                        };
+                    case 'P-521':
+                        return {
+                            name: 'ECDSA',
+                            hash: {
+                                name: 'SHA-512',
+                            },
+                        };
+                    default:
+                        throw new Error(`Unsupported curve name ${esAlgorithm.namedCurve}`);
+                }
+            }
+            // RSA Probablistic Signing Scheme: (PS256 / PS384 / PS512)
+            case 'RSA-PSS': {
+                const psAlgorithm = key.algorithm;
+                switch (psAlgorithm.hash.name) {
+                    case 'SHA-256':
+                        return {
+                            name: 'RSA-PSS',
+                            saltLength: 32,
+                        };
+                    case 'SHA-384':
+                        return {
+                            name: 'RSA-PSS',
+                            saltLength: 48,
+                        };
+                    case 'SHA-512':
+                        return {
+                            name: 'RSA-PSS',
+                            saltLength: 64,
+                        };
+                    default:
+                        throw new Error(`Unsupported hash algorithm name ${psAlgorithm.hash}`);
+                }
+            }
+            // RSA Public Key Cryptography Standard: (RS256 / RS384 / RS512)
+            case 'RSASSA-PKCS1-v1_5': {
+                return 'RSASSA-PKCS1-v1_5';
+            }
+            default:
+                throw new Error(`Unsupported algorithm name ${key.algorithm.name}`);
+        }
+    }
+    /**
+     * Gets the import parameter of an algorithm by its JWS name.
+     * @param algorithmName Name of signature algorithm.
+     * @returns Signature algorithm import parameter.
+     */
+    function getSignatureAlgorithmImportParameterFromName(algorithmName) {
+        switch (algorithmName) {
+            case 'ES256':
+                return {
+                    name: 'ECDSA',
+                    namedCurve: 'P-256',
+                };
+            case 'ES384':
+                return {
+                    name: 'ECDSA',
+                    namedCurve: 'P-384',
+                };
+            case 'ES512':
+                return {
+                    name: 'ECDSA',
+                    namedCurve: 'P-521',
+                };
+            case 'RS256':
+                return {
+                    name: 'RSASSA-PKCS1-v1_5',
+                    hash: 'SHA-256',
+                };
+            case 'RS384':
+                return {
+                    name: 'RSASSA-PKCS1-v1_5',
+                    hash: 'SHA-384',
+                };
+            case 'RS512':
+                return {
+                    name: 'RSASSA-PKCS1-v1_5',
+                    hash: 'SHA-512',
+                };
+            case 'PS256':
+                return {
+                    name: 'RSA-PSS',
+                    hash: 'SHA-256',
+                };
+            case 'PS384':
+                return {
+                    name: 'RSA-PSS',
+                    hash: 'SHA-384',
+                };
+            case 'PS512':
+                return {
+                    name: 'RSA-PSS',
+                    hash: 'SHA-512',
+                };
+            default:
+                throw new Error(`Invalid signing algorithm name "${algorithmName}"!`);
+        }
+    }
+    /**
+     * Validates a string to be a StringOrUri.
+     * @param str String to validate.
+     * @returns true = valid StringOrUri; false = no valid StringOrUri.
+     */
+    function isStringOrUri(str) {
+        if (str.indexOf(':') >= 0) {
+            try {
+                new URL(str);
+            }
+            catch (error) {
+                return false;
+            }
+        }
+        return true;
+    }
+    /**
+     * Validates a timestamp.
+     * @param timestamp Timestamp to validate.
+     * @returns true = valid timestamp; false = invalid timestamp.
+     */
+    function isTimestamp(timestamp) {
+        return timestamp >= 0 &amp;&amp; Number.isFinite(timestamp);
+    }
+    function stringToAsciiBytes(str) {
+        // Convert string to ASCII encoded bytes.
+        const asciiBytes = [];
+        for (let i = 0; i &lt; str.length; i++) {
+            asciiBytes[i] = str.charCodeAt(i);
+        }
+        return new Uint8Array(asciiBytes);
+    }
+    class MissingClaimError extends Error {
+        constructor(claimDescription, claimName) {
+            super(`${claimDescription} claim "${claimName}" is missing!`);
+        }
+    }
+    exports.MissingClaimError = MissingClaimError;
+    function getJwtVerificationOptions(options = true) {
+        if (typeof options === 'boolean') {
+            if (options === true) {
+                return {
+                    verifySignature: true,
+                    verifyTime: true,
+                    verificationTime: Date.now(),
+                    verificationTimeDelta: 0,
+                };
+            }
+            else {
+                return {
+                    verifySignature: false,
+                    verifyTime: false,
+                    verificationTime: Date.now(),
+                    verificationTimeDelta: 0,
+                };
+            }
+        }
+        else {
+            return {
+                verifySignature: options.verifySignature ?? true,
+                verifyTime: options.verifyTime ?? true,
+                verificationTime: options.verificationTime === undefined ? Date.now() : typeof options.verificationTime === 'number' ? options.verificationTime : options.verificationTime.getTime() / 1000,
+                verificationTimeDelta: options.verificationTimeDelta === undefined || options.verificationTimeDelta &lt; 0 || !Number.isFinite(options.verificationTimeDelta) ? 0 : options.verificationTimeDelta,
+            };
+        }
+    }
+});
+//# sourceMappingURL=ict-request-token.class.js.map</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="Base64NonceGenerator.html">Base64NonceGenerator</a></li><li><a href="CustomNonceGenerator.html">CustomNonceGenerator</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.2</a> on Mon Apr 03 2023 11:02:07 GMT+0200 (Central European Summer Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
