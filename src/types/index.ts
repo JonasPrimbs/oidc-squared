@@ -1,2 +1,3 @@
-export * from './jws-signature-algorithm.type';
-export * from './jwt-types';
+export * from './asymmetric-pop-confirmation-object.interface';
+export * from './asymmetric-signing-algorithms.type';
+export * from './confirmation-object.type';

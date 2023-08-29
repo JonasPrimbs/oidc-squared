@@ -7,7 +7,7 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "strict": true,
-    "module": "UMD",
+    "module": "NodeNext",
     "moduleResolution": "nodenext",
     "rootDir": "src",
     "declaration": true,
