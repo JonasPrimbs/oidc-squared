@@ -13,8 +13,8 @@ export class SignE2EPoPToken extends jose.SignJWT {
    * The SignE2EPoPToken class is used to build and sign End-to-End Proof-of-Possession Tokens (E2E PoPs).
    * @param payload Payload of the E2EPoP.
    */
-  constructor(payload: Partial<E2EPoPTokenPayload>) {
-    super(payload);
+  constructor(payload?: Partial<E2EPoPTokenPayload>) {
+    super(payload ?? {});
   }
 
   /**

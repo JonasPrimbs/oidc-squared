@@ -23,15 +23,30 @@ export async function ictVerify(ict: string | Uint8Array, publicKey: jose.KeyLik
   if (!options.requiredContext) {
     console.warn('No end-to-end authentication context provided. This is NOT RECOMMENDED!');
   }
+  options.typ = 'jwt+ict';
+  // Ensure that algorithms are supported.
+  if (options.algorithms) {
+    options.algorithms = options.algorithms.filter(alg => AVAILABLE_ASYMMETRIC_SIGNING_ALGORITHMS.indexOf(alg) >= 0);
+  } else {
+    options.algorithms = AVAILABLE_ASYMMETRIC_SIGNING_ALGORITHMS;
+  }
+  // Set required claims.
+  options.requiredClaims = [
+    ...(options.requiredClaims ?? []),
+    'sub',
+    'iss',
+    'jti',
+    'iat',
+    'exp',
+    'cnf',
+    'ctx',
+  ];
 
   // Verify JWT properties of ICT.
   const result = await jose.jwtVerify(ict, publicKey, options);
 
   // Verify header:
   const header = result.protectedHeader as Partial<ICTHeader>;
-  if (header.typ !== 'jwt+ict') {
-    throw new ICTInvalid(`Type of ICT is not "jwt+ict"! Value was ${header.typ}`);
-  }
   if (AVAILABLE_ASYMMETRIC_SIGNING_ALGORITHMS.indexOf(header.alg ?? '') < 0) {
     throw new ICTInvalid(`ICT uses the unsupported signing algorithm "${header.alg}"`);
   }
@@ -40,29 +55,11 @@ export async function ictVerify(ict: string | Uint8Array, publicKey: jose.KeyLik
   }
 
   // Verify payload:
-  const payload = result.payload as Partial<ICTPayload>;
+  const payload = result.payload as ICTPayload;
 
-  // Verify existance of required ICT claims:
-  if (!payload.sub) {
-    throw new ICTInvalid('ICTs MUST contain a "sub" (Subject) claim');
-  }
-  if (!payload.iss) {
-    throw new ICTInvalid('ICTs MUST contain an "iss" (Issuer) claim');
-  }
-  if (!payload.jti) {
-    throw new ICTInvalid('ICTs MUST contain a "jti" (JWT ID) claim');
-  }
-  if (!payload.iat) {
-    throw new ICTInvalid('ICTs MUST contain an "iat" (Issued At) claim');
-  }
-  if (!payload.exp) {
-    throw new ICTInvalid('ICTs MUST contain an "exp" (Expiration) claim');
-  }
-  if (!payload.cnf?.jwk) {
-    throw new ICTInvalid('ICTs MUST contain a "cnf" (Confirmation) claim');
-  }
-  if (!payload.ctx) {
-    throw new ICTInvalid('ICTs MUST contain at least one end-to-end authentication context');
+  // Verify that cnf claim contains the jwk parameter.
+  if (!payload.cnf.jwk) {
+    throw new ICTInvalid('ICTs MUST contain a "jwk" (JSON Web Key) parameter in their "cnf" (Confirmation) claim');
   }
 
   // Verify ICT contexts:

@@ -1,42 +1,5 @@
-# OIDC-Squared
-
-The OIDC² library for Browsers and Node.
-
-## Install
-
-```bash
-npm install oidc-squared
-```
-
-
-## Documentation
-
-The following shows a quick introduction to the OIDC² library.
-A more-detailed documentation is provided [here](https://jonasprimbs.github.io/oidc-squared/).
-
-
-### ICT Request Token
-
-#### Supported Signing Algorithms
-
-| Algorithm | Supported |
-|-----------|-----------|
-| ES256     | ✅         |
-| ES384     | ✅         |
-| ES512     | ✅         |
-| RS256     | ✅         |
-| RS384     | ✅         |
-| RS512     | ✅         |
-| PS256     | ✅         |
-| PS384     | ✅         |
-| PS512     | ✅         |
-| EdDSA     | ❌         |
-
-#### Generation Example
-
-```typescript
 import * as jose from 'jose';
-import { NonceGenerators, SignE2EPoPToken, SignICT, SignPoPToken, e2ePoPTokenVerify, ictVerify, popTokenVerify } from 'oidc-squared';
+import { NonceGenerators, SignE2EPoPToken, SignICT, SignPoPToken, e2ePoPTokenVerify, ictVerify, popTokenVerify } from '../src';
 
 // Prepare client:
 const opBaseUrl = 'https://op.example.com';
@@ -156,4 +119,3 @@ const e2ePoPResult = await e2ePoPTokenVerify(
 );
 
 console.log(`Successfully identified user "${e2ePoPResult.payload.sub}@${ictResult.payload.iss}"!`);
-```

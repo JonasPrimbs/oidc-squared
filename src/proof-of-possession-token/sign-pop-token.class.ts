@@ -13,8 +13,8 @@ export class SignPoPToken extends jose.SignJWT {
    * The SignPoPToken class is used to build and sign Proof-of-Possession Tokens.
    * @param payload Payload of the PoP Token.
    */
-  constructor(payload: Partial<PoPTokenPayload>) {
-    super(payload);
+  constructor(payload?: Partial<PoPTokenPayload>) {
+    super(payload ?? {});
   }
 
   /**

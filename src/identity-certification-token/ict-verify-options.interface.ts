@@ -11,4 +11,9 @@ export interface ICTVerifyOptions extends jose.JWTVerifyOptions {
    * Required end-to-end authentication context.
    */
   requiredContext?: string | string[];
+
+  /**
+   * Expected Type.
+   */
+  typ?: 'jwt+ict';
 }

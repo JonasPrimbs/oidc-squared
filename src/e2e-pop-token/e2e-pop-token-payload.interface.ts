@@ -19,7 +19,7 @@ export interface E2EPoPTokenPayload extends jose.JWTPayload {
   /**
    * JWT Audience.
    * 
-   * Typically the Client ID or application ID that the Authenticating Party identifies with.
+   * Typically the Client ID or User ID that the Authenticating Party uniquely identifies with.
    */
   aud: string | string[];
 
