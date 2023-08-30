@@ -1,5 +1,3 @@
-import * as crypto from 'crypto';
-
 import { NonceGenerator } from './nonce-generator.class';
 
 export class UuidNonceGenerator extends NonceGenerator {

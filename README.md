@@ -1,6 +1,6 @@
 # OIDC-Squared
 
-The OIDC² library for Browsers and Node.js.
+The OIDC² library for Browsers.
 
 
 ## Install
@@ -59,7 +59,7 @@ A PoP Token is typically generated on the Client using the following code:
 import { NonceGenerators, SignPoPToken } from 'oidc-squared';
 
 // Export the JWK public key:
-const publicJwk = await crypto.subtle.exportKey('jwk', clientKeyPair.publicKey),;
+const publicJwk = await crypto.subtle.exportKey('jwk', clientKeyPair.publicKey);
 
 // Create a new PoP Token:
 const popToken = await new SignPoPToken() // Also sets "iat" to now, "exp" to in 60 seconds, and "jti" to a new UUID.
