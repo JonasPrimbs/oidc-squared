@@ -1,6 +1,6 @@
 import * as jose from 'jose';
-import { PoPTokenHeader } from './pop-token-header.interface';
-import { PoPTokenPayload } from './pop-token-payload.interface';
+import { PoPTokenHeader } from './types/pop-token-header.interface';
+import { PoPTokenPayload } from './types/pop-token-payload.interface';
 
 export class SignPoPToken extends jose.SignJWT {
 

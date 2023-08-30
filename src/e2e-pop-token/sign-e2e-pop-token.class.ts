@@ -1,6 +1,6 @@
 import * as jose from 'jose';
-import { E2EPoPTokenHeader } from './e2e-pop-token-header.interface';
-import { E2EPoPTokenPayload } from './e2e-pop-token-payload.interface';
+import { E2EPoPTokenHeader } from './types/e2e-pop-token-header.interface';
+import { E2EPoPTokenPayload } from './types/e2e-pop-token-payload.interface';
 
 export class SignE2EPoPToken extends jose.SignJWT {
 

@@ -1,10 +1,10 @@
 import * as jose from 'jose';
 import { ICTInvalid } from '../errors/ict-invalid.class';
 import { AVAILABLE_ASYMMETRIC_SIGNING_ALGORITHMS } from '../types/asymmetric-signing-algorithms.type';
-import { ICTHeader } from './ict-header.interface';
-import { ICTPayload } from './ict-payload.interface';
-import { ICTVerifyOptions } from './ict-verify-options.interface';
-import { ICTVerifyResult } from './ict-verify-result.interface';
+import { ICTHeader } from './types/ict-header.interface';
+import { ICTPayload } from './types/ict-payload.interface';
+import { ICTVerifyOptions } from './types/ict-verify-options.interface';
+import { ICTVerifyResult } from './types/ict-verify-result.interface';
 
 /**
  * Verifies an Identity Certification Token.

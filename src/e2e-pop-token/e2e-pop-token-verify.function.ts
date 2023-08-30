@@ -1,10 +1,10 @@
 import * as jose from 'jose';
 import { E2EPoPTokenInvalid } from '../errors/e2e-pop-token-invalid.class';
 import { AVAILABLE_ASYMMETRIC_SIGNING_ALGORITHMS } from '../types/asymmetric-signing-algorithms.type';
-import { E2EPoPTokenHeader } from './e2e-pop-token-header.interface';
-import { E2EPoPTokenPayload } from './e2e-pop-token-payload.interface';
-import { E2EPoPVerifyOptions } from './e2e-pop-verify-options.interface';
-import { E2EPoPVerifyResult } from './e2e-pop-verify-result.interface';
+import { E2EPoPTokenHeader } from './types/e2e-pop-token-header.interface';
+import { E2EPoPTokenPayload } from './types/e2e-pop-token-payload.interface';
+import { E2EPoPVerifyOptions } from './types/e2e-pop-verify-options.interface';
+import { E2EPoPVerifyResult } from './types/e2e-pop-verify-result.interface';
 
 /**
  * Verifies an End-to-End Proof-of-Possession Token.

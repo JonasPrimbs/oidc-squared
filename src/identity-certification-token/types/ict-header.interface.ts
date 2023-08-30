@@ -1,5 +1,5 @@
 import * as jose from 'jose';
-import { AsymmetricSigningAlgorithms } from '../types/asymmetric-signing-algorithms.type';
+import { AsymmetricSigningAlgorithms } from '../../types/asymmetric-signing-algorithms.type';
 
 export interface ICTHeader extends jose.JWTHeaderParameters {
 

@@ -1,10 +1,10 @@
 import * as jose from 'jose';
 import { AVAILABLE_ASYMMETRIC_SIGNING_ALGORITHMS } from '../types/asymmetric-signing-algorithms.type';
-import { PoPTokenHeader } from './pop-token-header.interface';
-import { PoPTokenInvalid } from './pop-token-invalid.interface';
-import { PoPTokenPayload } from './pop-token-payload.interface';
-import { PoPTokenVerifyOptions } from './pop-token-verify-options.interface';
-import { PoPTokenVerifyResult } from './pop-token-verify-result.interface';
+import { PoPTokenHeader } from './types/pop-token-header.interface';
+import { PoPTokenInvalid } from './types/pop-token-invalid.interface';
+import { PoPTokenPayload } from './types/pop-token-payload.interface';
+import { PoPTokenVerifyOptions } from './types/pop-token-verify-options.interface';
+import { PoPTokenVerifyResult } from './types/pop-token-verify-result.interface';
 
 export async function popTokenVerify(popToken: string | Uint8Array, options: PoPTokenVerifyOptions = {}): Promise<PoPTokenVerifyResult> {
   // Validate options.

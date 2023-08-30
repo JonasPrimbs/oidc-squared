@@ -1,6 +1,6 @@
 import * as jose from 'jose';
-import { ICTHeader } from './ict-header.interface';
-import { ICTPayload } from './ict-payload.interface';
+import { ICTHeader } from './types/ict-header.interface';
+import { ICTPayload } from './types/ict-payload.interface';
 
 export class SignICT extends jose.SignJWT {
 
@@ -21,7 +21,7 @@ export class SignICT extends jose.SignJWT {
    * Set "cnf" (Confirmation) Claim.
    * @param publicKey The public "jwk" (JSON Web Key) parameter being present in the "cnf" (Confirmation) Claim.
    */
-  public setConfirmation(publicKey: JsonWebKey): this {
+  public setConfirmation(publicKey: jose.JWK): this {
     this._payload.cnf = {
       jwk: publicKey,
     };

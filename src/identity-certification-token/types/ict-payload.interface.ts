@@ -1,5 +1,5 @@
 import * as jose from 'jose';
-import { ConfirmationObject } from '../types/confirmation-object.type';
+import { ConfirmationObject } from '../../types/confirmation-object.type';
 
 export interface ICTPayload extends jose.JWTPayload {
 
