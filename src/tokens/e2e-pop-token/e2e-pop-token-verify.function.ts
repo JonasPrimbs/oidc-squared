@@ -1,6 +1,6 @@
 import * as jose from 'jose';
-import { E2EPoPTokenInvalid } from '../errors/e2e-pop-token-invalid.class';
-import { AVAILABLE_ASYMMETRIC_SIGNING_ALGORITHMS } from '../types/asymmetric-signing-algorithms.type';
+import { E2EPoPTokenInvalid } from '../../errors/e2e-pop-token-invalid.class';
+import { AVAILABLE_ASYMMETRIC_SIGNING_ALGORITHMS } from '../../types/asymmetric-signing-algorithms.type';
 import { E2EPoPTokenHeader } from './types/e2e-pop-token-header.interface';
 import { E2EPoPTokenPayload } from './types/e2e-pop-token-payload.interface';
 import { E2EPoPVerifyOptions } from './types/e2e-pop-verify-options.interface';

@@ -1,7 +1,7 @@
 import * as jose from 'jose';
-import { AVAILABLE_ASYMMETRIC_SIGNING_ALGORITHMS } from '../types/asymmetric-signing-algorithms.type';
+import { AVAILABLE_ASYMMETRIC_SIGNING_ALGORITHMS } from '../../types/asymmetric-signing-algorithms.type';
 import { PoPTokenHeader } from './types/pop-token-header.interface';
-import { PoPTokenInvalid } from './types/pop-token-invalid.interface';
+import { PoPTokenInvalid } from '../../errors/pop-token-invalid.class';
 import { PoPTokenPayload } from './types/pop-token-payload.interface';
 import { PoPTokenVerifyOptions } from './types/pop-token-verify-options.interface';
 import { PoPTokenVerifyResult } from './types/pop-token-verify-result.interface';

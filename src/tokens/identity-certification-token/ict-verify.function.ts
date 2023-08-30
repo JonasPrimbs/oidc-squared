@@ -1,6 +1,6 @@
 import * as jose from 'jose';
-import { ICTInvalid } from '../errors/ict-invalid.class';
-import { AVAILABLE_ASYMMETRIC_SIGNING_ALGORITHMS } from '../types/asymmetric-signing-algorithms.type';
+import { ICTInvalid } from '../../errors/ict-invalid.class';
+import { AVAILABLE_ASYMMETRIC_SIGNING_ALGORITHMS } from '../../types/asymmetric-signing-algorithms.type';
 import { ICTHeader } from './types/ict-header.interface';
 import { ICTPayload } from './types/ict-payload.interface';
 import { ICTVerifyOptions } from './types/ict-verify-options.interface';
