@@ -1,6 +1,10 @@
 import * as jose from 'jose';
-import { PoPTokenHeader, PoPTokenPayload } from '.';
 import { AVAILABLE_ASYMMETRIC_SIGNING_ALGORITHMS } from '../types/asymmetric-signing-algorithms.type';
+import { PoPTokenHeader } from './pop-token-header.interface';
+import { PoPTokenInvalid } from './pop-token-invalid.interface';
+import { PoPTokenPayload } from './pop-token-payload.interface';
+import { PoPTokenVerifyOptions } from './pop-token-verify-options.interface';
+import { PoPTokenVerifyResult } from './pop-token-verify-result.interface';
 
 export async function popTokenVerify(popToken: string | Uint8Array, options: PoPTokenVerifyOptions = {}): Promise<PoPTokenVerifyResult> {
   // Validate options.
@@ -47,41 +51,4 @@ export async function popTokenVerify(popToken: string | Uint8Array, options: PoP
     protectedHeader: header as PoPTokenHeader,
     payload: payload as PoPTokenPayload,
   };
-}
-
-export interface PoPTokenVerifyOptions extends jose.JWTVerifyOptions {
-
-  /**
-   * Maximum token age in seconds.
-   */
-  maxTokenAge?: number;
-
-  /**
-   * Expected Type.
-   */
-  typ?: 'jwt+pop';
-}
-
-export interface PoPTokenVerifyResult extends jose.JWTVerifyResult {
-
-  /**
-   * Protected JWT header.
-   */
-  protectedHeader: PoPTokenHeader;
-
-  /**
-   * ICT Claims Set.
-   */
-  payload: PoPTokenPayload;
-}
-
-export class PoPTokenInvalid extends jose.errors.JOSEError {
-  constructor(message?: string | undefined) {
-    super(message);
-    this.code = 'ERR_POP_TOKEN_INVALID';
-  }
-
-  static override get code(): string {
-    return 'ERR_POP_TOKEN_INVALID';
-  }
 }
