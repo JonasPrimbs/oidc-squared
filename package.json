@@ -1,6 +1,6 @@
 {
   "name": "oidc-squared",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "The OIDC² library.",
   "keywords": [
     "OpenID Connect",
