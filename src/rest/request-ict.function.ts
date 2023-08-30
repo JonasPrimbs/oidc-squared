@@ -17,6 +17,7 @@ export async function requestIct(options: ICTRequestOptions, http: HttpRequestFu
     pop_token: options.popToken,
     required_claims: options.requiredClaims,
     optional_claims: options.optionalClaims,
+    with_audience: options.withAudience,
   }));
 
   // Return result or throw error.

@@ -1,6 +1,8 @@
 import * as jose from 'jose';
 import { ICTHeader } from './types/ict-header.interface';
 import { ICTPayload } from './types/ict-payload.interface';
+import { NonceGenerators } from '../../nonce-generators/nonce-generators.class';
+import { AsymmetricSigningAlgorithms } from '../..';
 
 export class SignICT extends jose.SignJWT {
 
@@ -15,6 +17,8 @@ export class SignICT extends jose.SignJWT {
    */
   constructor(payload?: Partial<ICTPayload>) {
     super(payload ?? {});
+    this.setJti();
+    this.setIssuedAt();
   }
 
   /**
@@ -45,5 +49,39 @@ export class SignICT extends jose.SignJWT {
    */
   public override setProtectedHeader(protectedHeader: ICTHeader): this {
     return super.setProtectedHeader(protectedHeader);
+  }
+
+  /**
+   * Set "iat" (Issued At) Claim and sets the "exp" (Expiration) Claim to the recommended 60 seconds later, if not yet set.
+   * @param input "iat" (Issued At) Claim value to set on the JWT Claim Set or undefined to use now.
+   */
+  override setIssuedAt(input?: number | undefined): this {
+    const iatResult = super.setIssuedAt(input);
+    if (iatResult._payload.exp) {
+      return iatResult;
+    } else {
+      return super.setExpirationTime(iatResult._payload.iat! + 300);
+    }
+  }
+
+  /**
+   * Set "jti" (JWT ID) Claim.
+   * @param jwtId "jti" (JWT ID) Claim value to set on the JWT Claim Set or undefined to use a UUID.
+   */
+  override setJti(jwtId?: string): this {
+    return super.setJti(jwtId ?? NonceGenerators.uuid().generate());
+  }
+
+  /**
+   * Sets the Key ID of the key that the ICT will be signed with.
+   * @param alg JWA signing algorithm.
+   * @param kid Key ID.
+   */
+  public setKeyId(alg: AsymmetricSigningAlgorithms, kid: string): this {
+    return this.setProtectedHeader({
+      typ: 'jwt+ict',
+      alg: alg,
+      kid: kid,
+    });
   }
 }

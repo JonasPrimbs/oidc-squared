@@ -13,7 +13,7 @@ import { E2EPoPVerifyResult } from './types/e2e-pop-verify-result.interface';
  * @param options E2E PoP Token verification options.
  * @returns Header and payload of the successfully verified E2E PoP Token.
  */
-export async function e2ePoPTokenVerify(e2ePoPToken: string, publicKey: jose.KeyLike | Uint8Array, options: E2EPoPVerifyOptions = {}): Promise<E2EPoPVerifyResult> {
+export async function e2ePoPTokenVerify(e2ePoPToken: string, publicKey: jose.KeyLike | Uint8Array, options: E2EPoPVerifyOptions): Promise<E2EPoPVerifyResult> {
   // Validate options.
   if (!options.maxTokenAge || options.maxTokenAge <= 0) {
     options.maxTokenAge = 3600;

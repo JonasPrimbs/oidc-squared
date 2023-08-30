@@ -24,4 +24,10 @@ export interface ICTRequestOptions {
    * Array of optional identity claims.
    */
   optionalClaims: string[];
+
+  /**
+   * Whether the the audience should be present.
+   * @default true
+   */
+  withAudience?: boolean;
 }

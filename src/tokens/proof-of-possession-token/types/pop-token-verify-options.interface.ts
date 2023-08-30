@@ -11,4 +11,9 @@ export interface PoPTokenVerifyOptions extends jose.JWTVerifyOptions {
    * Expected Type.
    */
   typ?: 'jwt+pop';
+
+  /**
+   * Expected Audience.
+   */
+  audience: string;
 }

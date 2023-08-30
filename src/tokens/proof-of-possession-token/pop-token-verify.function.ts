@@ -6,7 +6,7 @@ import { PoPTokenPayload } from './types/pop-token-payload.interface';
 import { PoPTokenVerifyOptions } from './types/pop-token-verify-options.interface';
 import { PoPTokenVerifyResult } from './types/pop-token-verify-result.interface';
 
-export async function popTokenVerify(popToken: string | Uint8Array, options: PoPTokenVerifyOptions = {}): Promise<PoPTokenVerifyResult> {
+export async function popTokenVerify(popToken: string | Uint8Array, options: PoPTokenVerifyOptions): Promise<PoPTokenVerifyResult> {
   // Validate options.
   if (!options.maxTokenAge || options.maxTokenAge <= 0) {
     options.maxTokenAge = 300;
