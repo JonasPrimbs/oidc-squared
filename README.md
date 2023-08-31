@@ -121,8 +121,6 @@ const ictResponse = await requestIct({
   ictEndPoint: ictEndpoint,   // Provide ICT Endpoint here.
   accessToken: 'ey...',       // Insert Access Token for authorization here.
   popToken: popToken,         // Insert previously generated PoP Token here.
-  requiredClaims: ['name'],   // Insert all REQUIRED identity claims you want to be provided in the ICT here.
-  optionalClaims: ['email'],  // Insert all OPTIONAL identity claims you want to be provided in the ICT here.
 });
 
 // The ICT can be found in the identity_certification_token parameter of the response.
