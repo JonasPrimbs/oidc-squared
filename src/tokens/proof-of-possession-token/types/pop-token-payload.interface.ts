@@ -50,4 +50,20 @@ export interface PoPTokenPayload extends jose.JWTPayload {
    * The seconds-precision Unix timestamp when the PoP Token expires.
    */
   exp: number;
+
+  /**
+   * Array of required identity claims.
+   */
+  requiredClaims?: string[];
+
+  /**
+   * Array of optional identity claims.
+   */
+  optionalClaims?: string[];
+
+  /**
+   * Whether the audience should be present.
+   * @default true
+   */
+  withAudience?: boolean;
 }

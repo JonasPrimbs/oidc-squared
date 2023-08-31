@@ -14,20 +14,4 @@ export interface ICTRequestOptions {
    * Proof-of-possession token to provide public key and prove possession of the corresponding private key.
    */
   popToken: string;
-
-  /**
-   * Array of required identity claims.
-   */
-  requiredClaims: string[];
-
-  /**
-   * Array of optional identity claims.
-   */
-  optionalClaims: string[];
-
-  /**
-   * Whether the the audience should be present.
-   * @default true
-   */
-  withAudience?: boolean;
 }

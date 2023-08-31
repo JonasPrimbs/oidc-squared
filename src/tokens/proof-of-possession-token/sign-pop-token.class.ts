@@ -69,4 +69,31 @@ export class SignPoPToken extends jose.SignJWT {
       jwk: jwk,
     });
   }
+
+  /**
+   * Sets the required identity claims.
+   * @param requiredClaims Array of required identity claims.
+   */
+  public setRequiredClaims(requiredClaims: string[]): this {
+    this._payload.requiredClaims = requiredClaims;
+    return this;
+  }
+
+  /**
+   * Sets the requested optional identity claims.
+   * @param optionalClaims Array of requestd optional identity claims.
+   */
+  public setOptionalCLaims(optionalClaims: string[]): this {
+    this._payload.optionalClaims = optionalClaims;
+    return this;
+  }
+
+  /**
+   * Sets whether the "aud" (Audience) claim should be present in the requested ICT.
+   * @param withAudience Whether the audience should be present.
+   */
+  public setWithAudience(withAudience?: boolean): this {
+    this._payload.withAudience = withAudience;
+    return this;
+  }
 }

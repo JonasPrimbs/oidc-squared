@@ -12,13 +12,8 @@ export async function requestIct(options: ICTRequestOptions, http: HttpRequestFu
   // Request ICT.
   const result = await http('POST', options.ictEndpoint, new Headers({
     'Authorization': `bearer ${options.accessToken}`,
-    'Content-Type': 'application/json',
-  }), JSON.stringify({
-    pop_token: options.popToken,
-    required_claims: options.requiredClaims,
-    optional_claims: options.optionalClaims,
-    with_audience: options.withAudience,
-  }));
+    'Content-Type': 'application/jwt+pop',
+  }), options.popToken);
 
   // Return result or throw error.
   switch (result.responseCode) {

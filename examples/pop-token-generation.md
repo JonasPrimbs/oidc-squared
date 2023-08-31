@@ -58,6 +58,17 @@ popToken.setJti(NonceGenerators.uuid().generate());
 // You can also set the JWT ID to a random n-bytes (here: 16 bytes) long Base64-encoded string.
 popToken.setJti(NonceGenerators.base64(16).generate());
 
+// Set the requested required claims for the ICT.
+popToken.setRequiredClaims(['name']);
+
+// Set the requested optional claims for the ICT.
+popToken.setOptionalClaims(['email']);
+
+// Sets whether the audience claim should be present in the ICT.
+popToken.setWithAudience(true);
+// If no boolean provided, the claim will be deleted and defaults to true.
+popToken.setWithAudience();
+
 // Signs the PoP Token using the provided private key and returns its token string.
 const token = await popToken.sign(clientKeyPair.privateKey);
 ```

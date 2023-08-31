@@ -67,6 +67,9 @@ const popToken = await new SignPoPToken() // Also sets "iat" to now, "exp" to in
   .setIssuer('myclient')                  // Sets Issuer (= Client ID).
   .setSubject('alice')                    // Sets Subject (= End-User's Subject ID).
   .setAudience('https://op.example.com')  // Sets Audience (= OpenID Provider's Issuer URL).
+  .setRequiredClaims(['name'])            // (Optional) Sets the requested required claims for the ICT.
+  .setOptionalClaims(['email'])           // (Optional) Sets the requested optional claims for the ICT.
+  .setWithAudience(true)                  // Sets whether the audience claim should be present in the ICT.
   .sign(clientKeyPair.privateKey);        // Signs the PoP Token asynchronously and returns its token string.
 ```
 
